@@ -22,11 +22,12 @@ export function PanelMulai({ view }: { view: Siap }) {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-white/5 bg-white/[0.04] p-4">
-        <div className="flex items-center justify-between">
-          <p className="text-lg font-semibold">{view.dayName}</p>
-          {view.mode === "singkat" && (
-            <span className="rounded-full bg-amber-400/15 px-2.5 py-1 text-xs text-amber-200">Versi singkat ±30 menit</span>
-          )}
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-lg font-semibold leading-tight">{view.dayName}</p>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            {view.bonus && <span className="rounded-full bg-violet-400/15 px-2.5 py-1 text-xs text-violet-200">✨ bonus</span>}
+            {view.mode === "singkat" && <span className="rounded-full bg-amber-400/15 px-2.5 py-1 text-xs text-amber-200">Versi singkat ±30 menit</span>}
+          </div>
         </div>
 
         <ol className="mt-3 space-y-3">
@@ -37,7 +38,9 @@ export function PanelMulai({ view }: { view: Siap }) {
                 <p className="font-medium leading-tight">{e.name}</p>
                 <p className="text-sm text-slate-300">
                   {e.sets} × {e.repMin}-{e.repMax}
-                  {e.targetWeightKg != null ? (
+                  {e.bodyweight ? (
+                    <span className="text-emerald-300"> · berat badan sendiri, target {e.targetReps} rep</span>
+                  ) : e.targetWeightKg != null ? (
                     <span className="text-emerald-300">
                       {" "}
                       · target {fmtKg(e.targetWeightKg)} kg × {e.targetReps}
@@ -52,7 +55,13 @@ export function PanelMulai({ view }: { view: Siap }) {
           ))}
         </ol>
 
-        <p className="mt-4 text-xs text-slate-400">
+        <div className="mt-4 rounded-xl bg-white/5 p-3 text-sm">
+          <p className="font-medium">🚶 Kardio: {view.kardio.menit} menit</p>
+          <p className="mt-0.5 text-xs text-slate-300">{view.kardio.deskripsi}</p>
+          {view.kardio.alasan && <p className="mt-0.5 text-xs text-slate-500">{view.kardio.alasan}</p>}
+        </div>
+
+        <p className="mt-3 text-xs text-slate-400">
           🎯 Target hari ini: {fmtInt(view.targetKcal)} kcal · protein {view.targetProteinG} g
         </p>
       </div>

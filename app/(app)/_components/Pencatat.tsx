@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { fmtKg } from "@/lib/time.ts";
 import type { ExerciseView, LoggedSet, TodayView } from "@/lib/workout/today.ts";
 import { hapusSet, selesaiLatihan, simpanSet } from "../actions.ts";
+import { KartuKardio } from "./KartuKardio.tsx";
 import { Stepper } from "./Stepper.tsx";
 
 type Berjalan = Extract<TodayView, { kind: "berjalan" }>;
@@ -45,7 +46,8 @@ export function Pencatat({ view }: { view: Berjalan }) {
     const list = (workingBy.get(e.exerciseId) ?? []).filter((s) => !s.isWarmup);
     const last = list[list.length - 1];
     return {
-      weight: last?.weightKg ?? e.targetWeightKg ?? 20,
+      // Gerakan berat badan sendiri mulai dari beban tambahan 0; lainnya dari target, atau 20 kg kalau belum ada riwayat
+      weight: last?.weightKg ?? (e.bodyweight ? 0 : (e.targetWeightKg ?? 20)),
       reps: last?.reps ?? e.targetReps,
     };
   }
@@ -162,7 +164,14 @@ export function Pencatat({ view }: { view: Berjalan }) {
             {open && (
               <div className="space-y-4 border-t border-white/5 p-4">
                 <p className="text-xs text-slate-500">{e.note}</p>
-                <Stepper label="Beban" unit="kg" value={d.weight} step={e.stepKg} max={500} onChange={(w) => setDraft(e, { weight: w })} />
+                <Stepper
+                  label={e.bodyweight ? "Beban tambahan (0 = berat badan)" : "Beban"}
+                  unit="kg"
+                  value={d.weight}
+                  step={e.stepKg}
+                  max={500}
+                  onChange={(w) => setDraft(e, { weight: w })}
+                />
                 <Stepper label="Reps" value={d.reps} step={1} min={1} max={100} onChange={(r) => setDraft(e, { reps: Math.round(r) })} />
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -199,6 +208,8 @@ export function Pencatat({ view }: { view: Berjalan }) {
           </section>
         );
       })}
+
+      <KartuKardio menitSaran={view.kardio.menit} deskripsi={view.kardio.deskripsi} alasan={view.kardio.alasan} tersimpan={view.cardioMin} />
 
       {!showEnergy ? (
         <button onClick={() => setShowEnergy(true)} className="w-full rounded-2xl bg-white/10 px-5 py-4 text-base font-medium active:bg-white/20">

@@ -1,6 +1,10 @@
 import { ambilKesimpulan } from "../ai/summary.ts";
+import { statusTimbang } from "../body/db.ts";
+import { pengingatTimbang } from "../bot/pengingat.ts";
+import type { Kardio } from "../program/kardio.ts";
 import { roundingStep } from "../program/progression.ts";
-import { nextProgramDay } from "../program/queue.ts";
+import { pilihHariIni } from "../program/queue.ts";
+import { awalMinggu } from "../report/hitung.ts";
 import { isoWeekday } from "../time.ts";
 import {
   closeStaleSessions,
@@ -14,8 +18,9 @@ import {
   loadRecentSessions,
   type SessionRow,
   type SetRow,
+  type Settings,
 } from "./db.ts";
-import { buildMenu } from "./menu.ts";
+import { buildMenu, SESI_UTAMA_PER_MINGGU, type TodayMenu } from "./menu.ts";
 
 // Data yang dibutuhkan halaman "Hari ini" di app. Semua angka dari kode, bukan AI.
 
@@ -30,13 +35,18 @@ export type ExerciseView = {
   note: string;
   /** langkah tombol +/- beban */
   stepKg: number;
+  /** gerakan berat badan sendiri (beban awal 0) */
+  bodyweight: boolean;
 };
 
 export type LoggedSet = { id: number; exerciseId: number; weightKg: number; reps: number; rpe: number | null; isWarmup: boolean };
 
+export type PilihanMenu = { id: number; name: string; bonus: boolean };
+
 export type Recap = {
   dayName: string;
   energy: number | null;
+  cardioMin: number | null;
   totalSets: number;
   volumeKg: number;
   exercises: { name: string; sets: number; bestWeightKg: number; bestReps: number; prevText: string | null }[];
@@ -47,21 +57,45 @@ export type TodayView =
   | { kind: "tanpa_program" }
   | { kind: "istirahat"; dayName: string }
   | { kind: "skip" }
-  | { kind: "siap"; dayName: string; mode: "normal" | "singkat"; exercises: ExerciseView[]; targetKcal: number; targetProteinG: number }
-  | { kind: "berjalan"; dayName: string; mode: "normal" | "singkat"; sessionId: number; exercises: ExerciseView[]; logged: LoggedSet[] }
-  | { kind: "selesai"; recap: Recap; kesimpulan: string | null };
+  | {
+      kind: "siap";
+      dayId: number;
+      dayName: string;
+      bonus: boolean;
+      mode: "normal" | "singkat";
+      exercises: ExerciseView[];
+      kardio: Kardio;
+      pilihan: PilihanMenu[];
+      timbang: string | null;
+      targetKcal: number;
+      targetProteinG: number;
+    }
+  | {
+      kind: "berjalan";
+      dayName: string;
+      bonus: boolean;
+      mode: "normal" | "singkat";
+      sessionId: number;
+      exercises: ExerciseView[];
+      logged: LoggedSet[];
+      kardio: Kardio;
+      cardioMin: number | null;
+      timbang: string | null;
+    }
+  | { kind: "selesai"; recap: Recap; kesimpulan: string | null; timbang: string | null };
 
-function toView(menu: NonNullable<Awaited<ReturnType<typeof buildMenu>>>): ExerciseView[] {
+function toView(menu: TodayMenu): ExerciseView[] {
   return menu.items.map((p) => ({
     exerciseId: p.exercise.id,
     name: p.exercise.name,
     sets: p.sets,
     repMin: p.repMin,
     repMax: p.repMax,
-    targetWeightKg: p.target.weightKg,
+    targetWeightKg: p.exercise.is_bodyweight ? 0 : p.target.weightKg,
     targetReps: p.target.reps,
     note: p.target.note,
     stepKg: roundingStep(p.exercise.increment_kg),
+    bodyweight: p.exercise.is_bodyweight,
   }));
 }
 
@@ -74,6 +108,20 @@ function toLogged(rows: SetRow[]): LoggedSet[] {
     rpe: r.rpe,
     isWarmup: r.is_warmup,
   }));
+}
+
+/** Banner pengingat timbang (di gym, hari latihan terakhir minggu itu). null kalau nggak perlu. */
+export async function bannerTimbang(today: string, settings: Settings): Promise<string | null> {
+  const [st, sesi] = await Promise.all([statusTimbang(today), loadRecentSessions()]);
+  const mulai = awalMinggu(today);
+  const r = pengingatTimbang({
+    today,
+    hariSejakTimbang: st.hariSejak,
+    sudahTimbangMingguIni: st.sudahMingguIni,
+    sesiSelesaiMingguIni: sesi.filter((s) => s.status === "selesai" && (s.date ?? "") >= mulai).length,
+    targetSesi: settings.sessions_per_week,
+  });
+  return r.perlu ? (r.baris[1] ?? null) : null;
 }
 
 async function buildRecap(session: SessionRow, today: string): Promise<Recap> {
@@ -101,10 +149,11 @@ async function buildRecap(session: SessionRow, today: string): Promise<Recap> {
   return {
     dayName: days.find((d) => d.id === session.program_day_id)?.name ?? "Latihan",
     energy: session.energy,
+    cardioMin: session.cardio_min,
     totalSets: working.length,
     volumeKg: working.reduce((a, r) => a + r.weight_kg * r.reps, 0),
     exercises,
-    nextDayName: nextProgramDay(days, sessions)?.name ?? null,
+    nextDayName: pilihHariIni(days, sessions, today, SESI_UTAMA_PER_MINGGU)?.day.name ?? null,
   };
 }
 
@@ -115,27 +164,35 @@ export async function loadTodayView(today: string, force: boolean): Promise<Toda
   const [settings, plan, open] = await Promise.all([getSettings(), getTodayPlan(today), getOpenSession(today)]);
 
   if (open) {
-    const [menu, rows] = await Promise.all([buildMenu(today, open.mode), getSessionSets(open.id)]);
+    const [menu, rows, timbang] = await Promise.all([
+      buildMenu(today, open.mode, open.program_day_id),
+      getSessionSets(open.id),
+      bannerTimbang(today, settings),
+    ]);
     if (!menu) return { kind: "tanpa_program" };
     return {
       kind: "berjalan",
       dayName: menu.day.name,
+      bonus: menu.jenis === "bonus",
       mode: open.mode,
       sessionId: open.id,
       exercises: toView(menu),
       logged: toLogged(rows),
+      kardio: menu.kardio,
+      cardioMin: open.cardio_min,
+      timbang,
     };
   }
 
   const finished = await getFinishedSession(today);
   if (finished) {
-    const [recap, kesimpulan] = await Promise.all([buildRecap(finished, today), ambilKesimpulan(today)]);
-    return { kind: "selesai", recap, kesimpulan };
+    const [recap, kesimpulan, timbang] = await Promise.all([buildRecap(finished, today), ambilKesimpulan(today), bannerTimbang(today, settings)]);
+    return { kind: "selesai", recap, kesimpulan, timbang };
   }
 
   if (plan?.status === "dilewati") return { kind: "skip" };
 
-  const menu = await buildMenu(today, plan?.mode ?? "normal");
+  const [menu, timbang] = await Promise.all([buildMenu(today, plan?.mode ?? "normal"), bannerTimbang(today, settings)]);
   if (!menu) return { kind: "tanpa_program" };
 
   if (!force && !settings.workout_days.includes(isoWeekday(today))) {
@@ -144,9 +201,14 @@ export async function loadTodayView(today: string, force: boolean): Promise<Toda
 
   return {
     kind: "siap",
+    dayId: menu.day.id,
     dayName: menu.day.name,
+    bonus: menu.jenis === "bonus",
     mode: menu.mode,
     exercises: toView(menu),
+    kardio: menu.kardio,
+    pilihan: menu.pilihan.map((d) => ({ id: d.id, name: d.name, bonus: d.kind === "bonus" })),
+    timbang,
     targetKcal: settings.target_kcal,
     targetProteinG: settings.target_protein_g,
   };

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireOwner } from "@/lib/auth.ts";
 import { namaHari, todayWIB, fmtInt, fmtKg } from "@/lib/time.ts";
 import { loadTodayView } from "@/lib/workout/today.ts";
+import { BannerTimbang } from "./_components/BannerTimbang.tsx";
+import { GantiMenu } from "./_components/GantiMenu.tsx";
 import { KesimpulanAI } from "./_components/KesimpulanAI.tsx";
 import { PanelMulai } from "./_components/PanelMulai.tsx";
 import { PanelSkip } from "./_components/PanelSkip.tsx";
@@ -42,9 +44,20 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
 
       {view.kind === "skip" && <PanelSkip />}
 
-      {view.kind === "siap" && <PanelMulai view={view} />}
+      {view.kind === "siap" && (
+        <>
+          <BannerTimbang teks={view.timbang} />
+          <PanelMulai view={view} />
+          <GantiMenu pilihan={view.pilihan} saatIni={view.dayId} />
+        </>
+      )}
 
-      {view.kind === "berjalan" && <Pencatat view={view} />}
+      {view.kind === "berjalan" && (
+        <>
+          <BannerTimbang teks={view.timbang} />
+          <Pencatat view={view} />
+        </>
+      )}
 
       {view.kind === "selesai" && (
         <div className="space-y-3">
@@ -55,7 +68,12 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
               <Angka label="Volume (kg)" nilai={fmtInt(view.recap.volumeKg)} />
               <Angka label="Energi" nilai={view.recap.energy ? `${view.recap.energy}/5` : "-"} />
             </div>
+            <p className="mt-3 text-sm text-slate-300">
+              🚶 Kardio: {view.recap.cardioMin ? `${view.recap.cardioMin} menit` : "belum dicatat (catat dari tab Hari ini saat sesi berjalan, atau lewat bot: kardio 20)"}
+            </p>
           </Kartu>
+
+          <BannerTimbang teks={view.timbang} />
 
           <KesimpulanAI teks={view.kesimpulan} />
 

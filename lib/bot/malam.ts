@@ -1,6 +1,7 @@
 import { persen } from "../nutrition/calc.ts";
 import { dayTotals } from "../nutrition/db.ts";
 import { labelOpsi, saranProtein } from "../nutrition/saran.ts";
+import { belumDiminum, listSuplemen } from "../suplemen/db.ts";
 import { fmtInt, fmtKg, isoWeekday, todayWIB } from "../time.ts";
 import { getSettings } from "../workout/db.ts";
 import { formatLaporan, hitungLaporan, laporanSudahAda, simpanDanTerapkan } from "../report/mingguan.ts";
@@ -28,7 +29,9 @@ export async function pengingatProtein(ctx: Ctx): Promise<boolean> {
   if (t.proteinG >= s.target_protein_g * AMBANG_PROTEIN) return false;
 
   const kurang = Math.round(s.target_protein_g - t.proteinG);
-  const saran = saranProtein(kurang);
+  // Whey milik Nata (kalau sudah diatur di app) dipakai menggantikan nilai umum
+  const whey = (await listSuplemen(true)).find((x) => /whey/i.test(x.name) && x.proteinG > 0);
+  const saran = saranProtein(kurang, { whey: whey ? { proteinG: whey.proteinG, kcal: whey.kcal } : undefined });
   const lines: string[] = [
     `🥚 Pengingat protein`,
     `Protein hari ini ${fmtKg(t.proteinG)} / ${s.target_protein_g} g (${persen(t.proteinG, s.target_protein_g)}%) — kurang ±${kurang} g.`,
@@ -47,6 +50,18 @@ export async function pengingatProtein(ctx: Ctx): Promise<boolean> {
   lines.push("", "Nilai gizi di atas perkiraan umum, sesuaikan porsinya. Habis makan, catat lewat foto biar progresnya kehitung.");
 
   await ctx.send(lines.join("\n"), [[{ text: "🍽️ Buka Nutrisi", url: `${APP_URL}/nutrisi` }]]);
+  return true;
+}
+
+/** Pengingat suplemen (creatine) kalau belum dicatat hari ini, dengan tombol sekali tap. */
+export async function pengingatSuplemen(ctx: Ctx): Promise<boolean> {
+  const today = ctx.today ?? todayWIB();
+  const belum = await belumDiminum(today);
+  if (belum.length === 0) return false;
+  await ctx.send(
+    `💊 Belum tercatat hari ini: ${belum.map((s) => `${s.name} (${s.doseDesc})`).join(", ")}. Kalau udah diminum, tap tombol di bawah.`,
+    [belum.map((s) => ({ text: `✅ ${s.name.split(" ")[0]} udah`, data: `sp:${s.id}` }))],
+  );
   return true;
 }
 

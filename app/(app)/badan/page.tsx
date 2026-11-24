@@ -1,5 +1,5 @@
 import { requireOwner } from "@/lib/auth.ts";
-import { getTargets, listMeasurements } from "@/lib/body/db.ts";
+import { getTargets, isStandar, LABEL_KONDISI, listMeasurements } from "@/lib/body/db.ts";
 import { dailyValues, movingAverage7, outlook, weeklyRate } from "@/lib/body/trend.ts";
 import { laporanTerakhir } from "@/lib/report/mingguan.ts";
 import { fmtKg, tglLengkap, tglSingkat, todayWIB } from "@/lib/time.ts";
@@ -100,7 +100,8 @@ export default async function BadanPage() {
                 id={m.id}
                 date={m.date}
                 weightKg={m.weightKg}
-                standar={m.condition === "pagi_puasa"}
+                kondisi={LABEL_KONDISI[m.condition]}
+                standar={isStandar(m.condition)}
                 sumber={SUMBER[m.source] ?? m.source}
               />
             ))}

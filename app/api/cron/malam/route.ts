@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { laporanMingguan, pengingatProtein } from "@/lib/bot/malam.ts";
+import { laporanMingguan, pengingatProtein, pengingatSuplemen } from "@/lib/bot/malam.ts";
 import { db } from "@/lib/supabase.ts";
 import { sendMessage } from "@/lib/telegram.ts";
 import { todayWIB } from "@/lib/time.ts";
@@ -39,6 +39,7 @@ export async function GET(request: Request) {
   const hasil: Record<string, unknown> = {};
   try {
     hasil.protein = await pengingatProtein(ctx);
+    hasil.suplemen = await pengingatSuplemen(ctx);
     hasil.laporan = await laporanMingguan(ctx, { tulis: true });
     return Response.json({ ok: true, today, ...hasil });
   } catch (err) {

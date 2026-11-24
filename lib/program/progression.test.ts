@@ -137,6 +137,31 @@ test("riwayat yang urutannya terbalik tetap dibaca benar", () => {
   assert.equal(t.reps, 9);
 });
 
+test("bodyweight: belum ada data -> beban 0 (bukan null), progres lewat reps", () => {
+  const s: Scheme = { sets: 3, repMin: 8, repMax: 15 };
+  const bw = { bodyweight: true };
+  const awal = computeTarget([], s, 2, "2026-11-26", bw);
+  assert.equal(awal.weightKg, 0);
+  assert.equal(awal.reps, 8);
+
+  const tambah = computeTarget([session("2026-11-23", 0, [10, 9, 8])], s, 2, "2026-11-26", bw);
+  assert.equal(tambah.weightKg, 0);
+  assert.equal(tambah.reps, 9);
+  assert.equal(tambah.reason, "tambah_rep");
+
+  const atas = computeTarget([session("2026-11-23", 0, [15, 15, 15])], s, 2, "2026-11-26", bw);
+  assert.equal(atas.weightKg, 0); // nggak otomatis nambah beban
+  assert.equal(atas.reps, 15);
+  assert.match(atas.note, /tempo/);
+});
+
+test("bodyweight: libur nggak mengubah beban 0", () => {
+  const s: Scheme = { sets: 3, repMin: 8, repMax: 15 };
+  const t = computeTarget([session("2026-11-01", 0, [12, 12, 12])], s, 2, "2026-11-20", { bodyweight: true });
+  assert.equal(t.weightKg, 0);
+  assert.equal(t.reason, "balik_libur_lama");
+});
+
 test("helper tanggal dan pembulatan", () => {
   assert.equal(daysBetween("2026-11-28", "2026-12-05"), 7);
   assert.equal(daysBetween("2026-12-30", "2027-01-02"), 3);

@@ -1,28 +1,53 @@
 import { isoWeekday } from "../time.ts";
 
-/** Ambang: sudah segini hari nggak timbang -> diingatkan walau bukan Minggu. */
-export const HARI_LUPA_TIMBANG = 8;
+const PANDUAN =
+  "Timbang di gym SEBELUM mulai latihan, pakaian ringan tanpa sepatu, dan usahakan kondisinya sama tiap minggu (biar angkanya bisa dibandingin).";
+
+export type MasukanPengingat = {
+  today: string;
+  /** hari sejak timbangan terakhir; null = belum pernah */
+  hariSejakTimbang: number | null;
+  /** sudah ada timbangan di minggu ini (Senin-Minggu)? */
+  sudahTimbangMingguIni: boolean;
+  sesiSelesaiMingguIni: number;
+  targetSesi: number;
+};
 
 /**
- * Pengingat timbang di pesan pagi: tiap Minggu, atau kalau sudah >= 8 hari nggak timbang,
- * atau belum pernah timbang sama sekali. Murni fungsi, gampang dites.
+ * Pengingat timbang di pesan pagi. Nata nggak punya timbangan di kosan, jadi timbang di gym pada
+ * hari latihan TERAKHIR tiap minggu (Senin-Jumat). Karena hari terakhirnya belum tentu Jumat:
+ *  - Jumat: pengingat tegas kalau minggu ini belum timbang.
+ *  - Kamis: pengingat lembut ("kalau ini sesi terakhir minggu ini ...").
+ *  - Senin-Rabu: hanya kalau jatah sesi minggu itu sudah terpenuhi (berarti bisa jadi udah sesi terakhir).
+ *  - Weekend: nggak ada pengingat (nggak ada timbangan).
+ * Murni fungsi, gampang dites.
  */
-export function pengingatTimbang(today: string, hariSejakTimbang: number | null): { baris: string[]; perlu: boolean } {
-  if (isoWeekday(today) === 7) {
+export function pengingatTimbang(m: MasukanPengingat): { baris: string[]; perlu: boolean } {
+  const hari = isoWeekday(m.today);
+  const kosong = { baris: [] as string[], perlu: false };
+
+  if (hari >= 6 || m.sudahTimbangMingguIni) return kosong;
+
+  if (hari === 5) {
     return {
       perlu: true,
-      baris: [
-        "",
-        "⚖️ Hari ini jadwal timbang mingguan. Timbang sekarang: habis bangun, ke toilet, belum makan/minum, sebelum olahraga (biar hasilnya bisa dibandingin).",
-        "Catat lewat tombol di bawah, atau ketik /timbang 71.4 pagi. Sore nanti gua kirim laporan mingguannya.",
-      ],
+      baris: ["", `⚖️ Hari ini hari terakhir minggu ini dan lo belum timbang. ${PANDUAN}`, "Catat lewat tombol di bawah, atau ketik /timbang 71.4 gym. Minggu sore gua kirim laporan mingguannya."],
     };
   }
-  if (hariSejakTimbang == null) {
-    return { perlu: true, baris: ["", "⚖️ Belum ada timbangan. Timbang pagi hari (habis bangun, belum makan/minum) terus catat biar tren berat kelihatan."] };
+  if (hari === 4) {
+    return {
+      perlu: true,
+      baris: ["", `⚖️ Kalau hari ini sesi latihan terakhir lo minggu ini, sekalian timbang. ${PANDUAN}`, "Catat lewat tombol di bawah, atau ketik /timbang 71.4 gym."],
+    };
   }
-  if (hariSejakTimbang >= HARI_LUPA_TIMBANG) {
-    return { perlu: true, baris: ["", `⚖️ Terakhir timbang ${hariSejakTimbang} hari lalu. Timbang hari ini pagi-pagi biar tren berat tetap kelihatan.`] };
+  if (m.sesiSelesaiMingguIni >= m.targetSesi) {
+    return {
+      perlu: true,
+      baris: ["", `⚖️ Jatah sesi minggu ini udah ${m.sesiSelesaiMingguIni}. Kalau hari ini yang terakhir, sekalian timbang. ${PANDUAN}`],
+    };
   }
-  return { perlu: false, baris: [] };
+  if (m.hariSejakTimbang == null) {
+    return { perlu: true, baris: ["", `⚖️ Lo belum pernah timbang di app ini. Mulai minggu ini ya. ${PANDUAN}`] };
+  }
+  return kosong;
 }

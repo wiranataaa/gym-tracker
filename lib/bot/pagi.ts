@@ -1,7 +1,9 @@
-import { listMeasurements } from "../body/db.ts";
-import { daysBetween } from "../body/trend.ts";
+import { statusTimbang } from "../body/db.ts";
 import { addDays, fmtInt, fmtKg, isoWeekday, namaHari, tglLengkap, todayWIB } from "../time.ts";
 import { dayTotals } from "../nutrition/db.ts";
+import { awalMinggu } from "../report/hitung.ts";
+import { belumDiminum } from "../suplemen/db.ts";
+import type { Button } from "../telegram.ts";
 import { getSettings } from "../workout/db.ts";
 import { listSessions } from "../workout/history.ts";
 import { handleBotInput, type Ctx } from "./handlers.ts";
@@ -11,14 +13,20 @@ export const APP_URL = process.env.APP_URL ?? "https://gym-tracker-nu-two-90.ver
 
 /**
  * Pesan pagi, dikirim tiap hari (hari latihan atau bukan, pagi atau malam latihannya):
- * rekap singkat kemarin (latihan + kalori/protein), lalu menu hari ini dengan target beban.
- * Semua angka dari kode, tanpa AI.
+ * rekap singkat kemarin (latihan + kalori/protein), pengingat suplemen dan timbang,
+ * lalu menu hari ini dengan target beban dan kardio. Semua angka dari kode, tanpa AI.
  */
 export async function pesanPagi(ctx: Ctx): Promise<void> {
   const today = ctx.today ?? todayWIB();
   const kemarin = addDays(today, -1);
 
-  const [sesi, nut, settings, ukur] = await Promise.all([listSessions(40), dayTotals(kemarin), getSettings(), listMeasurements(1)]);
+  const [sesi, nut, settings, st, suplemen] = await Promise.all([
+    listSessions(40),
+    dayTotals(kemarin),
+    getSettings(),
+    statusTimbang(today),
+    belumDiminum(today),
+  ]);
   const sKemarin = sesi.filter((s) => s.date === kemarin && s.status === "selesai" && s.totalSets > 0);
 
   const lines: string[] = [`☀️ Selamat pagi, Nata! ${namaHari(today)}, ${tglLengkap(today)}`, ""];
@@ -43,18 +51,29 @@ export async function pesanPagi(ctx: Ctx): Promise<void> {
     lines.push("🍽️ Belum ada catatan makan kemarin. Kirim foto makanan ke sini biar kalori dan protein kehitung.");
   }
 
-  // Pengingat timbang: tiap Minggu pagi, dan kalau sudah lama nggak timbang (>= 8 hari)
-  const hariSejakTimbang = ukur[0] ? daysBetween(ukur[0].date, today) : null;
-  const timbang = pengingatTimbang(today, hariSejakTimbang);
-  const perluTimbang = timbang.perlu;
+  // Suplemen yang minta diingatkan (creatine): tinggal tap "udah" kalau sudah diminum
+  const tombolSuplemen: Button[] = [];
+  if (suplemen.length > 0) {
+    lines.push("", `💊 Hari ini: ${suplemen.map((s) => `${s.name} (${s.doseDesc})`).join(", ")}`);
+    for (const s of suplemen) tombolSuplemen.push({ text: `✅ ${s.name.split(" ")[0]} udah`, data: `sp:${s.id}` });
+  }
+
+  // Pengingat timbang: di gym, hari latihan terakhir minggu itu (nggak ada timbangan di kosan)
+  const mulai = awalMinggu(today);
+  const timbang = pengingatTimbang({
+    today,
+    hariSejakTimbang: st.hariSejak,
+    sudahTimbangMingguIni: st.sudahMingguIni,
+    sesiSelesaiMingguIni: sesi.filter((s) => s.status === "selesai" && s.date >= mulai).length,
+    targetSesi: settings.sessions_per_week,
+  });
   lines.push(...timbang.baris);
 
-  await ctx.send(lines.join("\n"), [
-    [
-      { text: "📱 Buka app", url: APP_URL },
-      ...(perluTimbang ? [{ text: "⚖️ Catat timbangan", url: `${APP_URL}/badan` }] : []),
-    ],
-  ]);
+  const baris: Button[][] = [
+    [{ text: "📱 Buka app", url: APP_URL }, ...(timbang.perlu ? [{ text: "⚖️ Catat timbangan", url: `${APP_URL}/badan` }] : [])],
+  ];
+  if (tombolSuplemen.length > 0) baris.push(tombolSuplemen);
+  await ctx.send(lines.join("\n"), baris);
 
   // Menu hari ini (atau pesan istirahat kalau weekend), lengkap dengan target beban dan tombolnya
   await handleBotInput({ text: "/hari_ini" }, ctx);

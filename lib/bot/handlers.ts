@@ -9,6 +9,7 @@ import {
   finishSession,
   getHistory,
   getOpenSession,
+  getSessionById,
   getSessionSets,
   getTodayPlan,
   loadExercises,
@@ -20,8 +21,10 @@ import {
   type ExerciseRow,
   type SessionRow,
 } from "../workout/db.ts";
-import { buildMenu, formatMenu, getSettings, isWorkoutDay, targetLine, type TodayMenu } from "../workout/menu.ts";
-import { nextProgramDay } from "../program/queue.ts";
+import { buildMenu, formatMenu, getSettings, isWorkoutDay, SESI_UTAMA_PER_MINGGU, targetLine, type TodayMenu } from "../workout/menu.ts";
+import { pilihHariIni } from "../program/queue.ts";
+import { bannerTimbang } from "../workout/today.ts";
+import { callbackSuplemen, catatKardio, pilihMenu, showGantiMenu, tampilSuplemen } from "./menuSuplemen.ts";
 import { buatKesimpulanSesi } from "../ai/summary.ts";
 import { handleMakanText, handleNutriCallback, handlePhoto, showFavorites, showProgress } from "./nutrition.ts";
 
@@ -42,7 +45,10 @@ const HELP = [
   "/singkat — versi 30 menit buat hari capek",
   "/skip — lewati latihan hari ini (antrean nggak maju)",
   "/selesai — tutup sesi",
-  "/timbang 71.4 — catat berat badan (tambah kata 'pagi' kalau habis bangun & belum makan)",
+  "/timbang 71.4 gym — catat berat badan (tambah 'gym' kalau timbang di gym sebelum latihan, 'pagi' kalau habis bangun & belum makan)",
+  "/menu — ganti menu hari ini (utama A/B/C atau bonus D/E/F buat variasi)",
+  "/suplemen — catat creatine dan whey",
+  "kardio 20 — catat menit kardio (jalan di treadmill)",
   "📸 Kirim foto makanan — gua hitung kalori dan proteinnya",
   "/makan nasi putih + ayam bakar + tempe 2 — hitung dari teks",
   "/fav — catat makanan favorit sekali tap",
@@ -60,6 +66,7 @@ const MENU_BUTTONS: Keyboard = [
     { text: "😮‍💨 Versi singkat", data: "singkat" },
     { text: "⏭️ Hari ini skip", data: "skip" },
   ],
+  [{ text: "🔀 Ganti menu", data: "ganti" }],
 ];
 
 const DURING_BUTTONS: Keyboard = [
@@ -208,11 +215,18 @@ async function closeWorkout(ctx: Ctx, today: string, sessionId: number, energy: 
     lines.push(`Per otot (kg): ${groups.join(" · ")}`);
   }
   lines.push(`Energi: ${energy}/5`);
+  const sesiNow = await getSessionById(sessionId);
+  if (sesiNow?.cardio_min) lines.push(`🚶 Kardio: ${sesiNow.cardio_min} menit`);
 
   const [{ days }, sessions] = await Promise.all([loadProgram(), loadRecentSessions()]);
-  const next = nextProgramDay(days, sessions);
-  if (next) lines.push(`Berikutnya di antrean: ${next.name}`);
+  const next = pilihHariIni(days, sessions, today, SESI_UTAMA_PER_MINGGU);
+  if (next) lines.push(`Berikutnya: ${next.day.name}${next.jenis === "bonus" ? " (bonus, kalau mau latihan lagi)" : ""}`);
   lines.push(`🎯 Jangan lupa nutrisi: ${fmtInt(settings.target_kcal)} kcal · protein ${settings.target_protein_g} g`);
+  if (!sesiNow?.cardio_min) lines.push("🚶 Belum kardio? Catat dengan: kardio 20 (menit)");
+
+  // Pengingat timbang di gym (hari latihan terakhir minggu itu)
+  const timbang = await bannerTimbang(today, settings);
+  if (timbang) lines.push("", timbang, "Catat: /timbang 71.4 gym");
   await ctx.send(lines.join("\n"));
 
   // Kesimpulan: angka dihitung kode, AI cuma menulis; kalau AI gagal ada versi tanpa AI
@@ -234,7 +248,7 @@ async function showNext(ctx: Ctx, today: string): Promise<void> {
     await ctx.send("Belum ada sesi yang jalan. Ketik /mulai dulu.");
     return;
   }
-  const menu = await buildMenu(today, open.mode);
+  const menu = await buildMenu(today, open.mode, open.program_day_id);
   if (!menu) return;
   const done = await getSessionSets(open.id);
   const nextItem = pickNext(menu, done);
@@ -325,7 +339,7 @@ async function logText(ctx: Ctx, today: string, text: string): Promise<void> {
     else if (prReps) lines.push(`🎉 PR rep di ${fmtKg(parsed.weightKg)} kg!`);
 
     const mode = session.mode;
-    const menu = await buildMenu(today, mode);
+    const menu = await buildMenu(today, mode, session.program_day_id);
     if (menu) {
       const planned = menu.items.find((p) => p.exercise.id === exercise.id);
       const doneNow =
@@ -355,15 +369,24 @@ async function logWeight(ctx: Ctx, arg: string): Promise<void> {
     await ctx.send("Angkanya kayaknya nggak masuk akal. Coba lagi, contoh: /timbang 71.4");
     return;
   }
-  const condition = /\bpagi\b/.test(arg.toLowerCase()) ? "pagi_puasa" : "lainnya";
+  const a = arg.toLowerCase();
+  const condition = /\bgym\b|\bsebelum\b/.test(a)
+    ? "sebelum_latihan"
+    : /\bpagi\b/.test(a)
+      ? "pagi_puasa"
+      : /\bsetelah\b|\bhabis\b/.test(a)
+        ? "setelah_olahraga"
+        : "lainnya";
   const { previous, avg7 } = await addWeight(kg, condition);
-  const lines = [`⚖️ Tercatat ${fmtKg(kg)} kg${condition === "pagi_puasa" ? " (kondisi standar: pagi)" : ""}.`];
+  const standar = condition === "sebelum_latihan" || condition === "pagi_puasa";
+  const label = { sebelum_latihan: "sebelum latihan di gym", pagi_puasa: "pagi, belum makan", setelah_olahraga: "setelah latihan", setelah_makan: "setelah makan", lainnya: "" }[condition];
+  const lines = [`⚖️ Tercatat ${fmtKg(kg)} kg${standar ? ` (kondisi standar: ${label})` : label ? ` (${label})` : ""}.`];
   if (previous != null) {
     const d = kg - previous;
     lines.push(`Dibanding timbangan sebelumnya: ${d >= 0 ? "+" : ""}${fmtKg(d)} kg`);
   }
   lines.push(`Rata-rata 7 hari: ${fmtKg(avg7)} kg`);
-  if (condition === "lainnya") lines.push("Tip: timbang pagi hari, setelah ke toilet, sebelum makan/minum biar tren-nya akurat.");
+  if (!standar) lines.push("Tip: timbang di gym SEBELUM latihan, hari latihan terakhir minggu itu, dan tambah kata 'gym': /timbang 71.4 gym");
   await ctx.send(lines.join("\n"));
 }
 
@@ -389,6 +412,10 @@ export async function handleBotInput(input: BotUpdate, ctx: Ctx): Promise<void> 
     if (data === "singkat") return setMode(ctx, today, "singkat");
     if (data === "skip") return skipToday(ctx, today);
     if (data === "menu") return showToday(ctx, today, true);
+    if (data === "ganti") return showGantiMenu(ctx, today);
+    const pm = data.match(/^pm:(\d+)$/);
+    if (pm) return pilihMenu(ctx, today, Number(pm[1]), () => showToday(ctx, today, true));
+    if (await callbackSuplemen(ctx, today, data)) return;
     if (data === "next") return showNext(ctx, today);
     if (data === "selesai") return askEnergy(ctx, today);
     const e = data.match(/^energi:(\d+):([1-5])$/);
@@ -426,10 +453,20 @@ export async function handleBotInput(input: BotUpdate, ctx: Ctx): Promise<void> 
         return showFavorites(ctx);
       case "/nutrisi":
         return showProgress(ctx);
+      case "/menu":
+        return showGantiMenu(ctx, today);
+      case "/suplemen":
+        return tampilSuplemen(ctx, today);
+      case "/kardio":
+        return catatKardio(ctx, today, parseInt(rest[0] ?? "", 10));
       default:
         return ctx.send("Perintah itu belum ada. Ketik /bantuan buat daftar yang tersedia.");
     }
   }
+
+  // "kardio 20" (menit) tanpa garis miring
+  const kardio = text.toLowerCase().match(/^kardio\s+(\d{1,3})$/);
+  if (kardio) return catatKardio(ctx, today, parseInt(kardio[1], 10));
 
   return logText(ctx, today, text);
 }

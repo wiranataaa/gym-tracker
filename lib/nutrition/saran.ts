@@ -28,9 +28,9 @@ function opsi(s: Sumber, jumlah: number): Opsi {
 }
 
 /** Berapa satuan satu sumber supaya sendirian nutup kekurangan. null kalau melebihi batas wajar. */
-export function opsiTunggal(kekuranganG: number): Opsi[] {
+export function opsiTunggal(kekuranganG: number, sumber: Sumber[] = SUMBER_PROTEIN): Opsi[] {
   const out: Opsi[] = [];
-  for (const s of SUMBER_PROTEIN) {
+  for (const s of sumber) {
     const n = Math.ceil(kekuranganG / s.proteinG);
     if (n >= 1 && n <= s.maks) out.push(opsi(s, n));
   }
@@ -39,8 +39,8 @@ export function opsiTunggal(kekuranganG: number): Opsi[] {
 }
 
 /** Campuran dua sumber paling "ramping", masing-masing menutup separuh. */
-export function opsiCampuran(kekuranganG: number): Opsi[] | null {
-  const ramping = [...SUMBER_PROTEIN].sort((a, b) => a.kcal / a.proteinG - b.kcal / b.proteinG);
+export function opsiCampuran(kekuranganG: number, sumber: Sumber[] = SUMBER_PROTEIN): Opsi[] | null {
+  const ramping = [...sumber].sort((a, b) => a.kcal / a.proteinG - b.kcal / b.proteinG);
   const [a, b] = [ramping[0], ramping[1]];
   const separuh = kekuranganG / 2;
   const na = Math.max(1, Math.round(separuh / a.proteinG));
@@ -60,14 +60,18 @@ export type Saran = {
 /** Batas kekurangan yang masih masuk akal dikejar di malam hari. */
 export const BATAS_KEKURANGAN_G = 70;
 
-export function saranProtein(kekuranganG: number): Saran {
+/**
+ * @param opts.whey nilai whey milik Nata (dari label produknya) menggantikan nilai umum
+ */
+export function saranProtein(kekuranganG: number, opts: { whey?: { proteinG: number; kcal: number } } = {}): Saran {
   const k = Math.max(0, Math.round(kekuranganG));
   const target = Math.min(k, BATAS_KEKURANGAN_G);
+  const sumber = SUMBER_PROTEIN.map((s) => (s.nama === "Whey protein" && opts.whey && opts.whey.proteinG > 0 ? { ...s, proteinG: opts.whey.proteinG, kcal: opts.whey.kcal } : s));
   return {
     kekuranganG: k,
     terlaluBanyak: k > BATAS_KEKURANGAN_G,
-    tunggal: opsiTunggal(target).slice(0, 3),
-    campuran: target > 0 ? opsiCampuran(target) : null,
+    tunggal: opsiTunggal(target, sumber).slice(0, 3),
+    campuran: target > 0 ? opsiCampuran(target, sumber) : null,
   };
 }
 

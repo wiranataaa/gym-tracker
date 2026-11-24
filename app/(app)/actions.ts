@@ -12,7 +12,9 @@ import {
   finishSession,
   getOpenSession,
   getTodayPlan,
+  loadProgram,
   logSets,
+  saveCardio,
   savePlan,
   startSession,
 } from "@/lib/workout/db.ts";
@@ -74,6 +76,30 @@ export async function skipHariIni(): Promise<Result> {
 export async function batalSkip(): Promise<Result> {
   await requireOwner();
   await savePlan(todayWIB(), { status: "disarankan" });
+  refresh();
+  return { ok: true };
+}
+
+/** Ganti menu hari ini (utama A/B/C atau bonus D/E/F). Nggak bisa kalau sesi sudah jalan. */
+export async function pilihMenuHariIni(dayId: number): Promise<Result> {
+  await requireOwner();
+  if (!Number.isInteger(dayId) || dayId <= 0) return { ok: false, error: "Menu nggak valid" };
+  const today = todayWIB();
+  if (await getOpenSession(today)) return { ok: false, error: "Sesi udah jalan, menu nggak bisa diganti" };
+  const { days } = await loadProgram();
+  if (!days.some((d) => d.id === dayId)) return { ok: false, error: "Menu nggak ketemu" };
+  await savePlan(today, { program_day_id: dayId, status: "disarankan" });
+  refresh();
+  return { ok: true };
+}
+
+/** Catat menit kardio (jalan di treadmill) di sesi yang sedang berjalan. 0 = kosongkan. */
+export async function simpanKardio(menit: number): Promise<Result> {
+  await requireOwner();
+  if (!Number.isInteger(menit) || menit < 0 || menit > 240) return { ok: false, error: "Menitnya nggak masuk akal" };
+  const open = await getOpenSession(todayWIB());
+  if (!open) return { ok: false, error: "Nggak ada sesi yang jalan" };
+  await saveCardio(open.id, menit === 0 ? null : menit);
   refresh();
   return { ok: true };
 }

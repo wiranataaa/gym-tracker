@@ -8,11 +8,13 @@ type Props = {
   id: number;
   date: string;
   weightKg: number;
+  /** teks kondisi, mis. "sebelum latihan (gym)" */
+  kondisi: string;
   standar: boolean;
   sumber: string;
 };
 
-export function BarisTimbangan({ id, date, weightKg, standar, sumber }: Props) {
+export function BarisTimbangan({ id, date, weightKg, kondisi, standar, sumber }: Props) {
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -23,7 +25,8 @@ export function BarisTimbangan({ id, date, weightKg, standar, sumber }: Props) {
         <div>
           <p className="font-medium">{fmtKg(weightKg)} kg</p>
           <p className="text-xs text-slate-400">
-            {tglPendek(date)} · {standar ? "kondisi standar" : "non-standar"} · {sumber}
+            {tglPendek(date)} · {kondisi}
+            {standar ? " ✓" : " (non-standar)"} · {sumber}
           </p>
         </div>
         {!confirm ? (

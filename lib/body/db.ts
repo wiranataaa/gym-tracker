@@ -1,12 +1,28 @@
 import { db, must } from "../supabase.ts";
+import { awalMinggu } from "../report/hitung.ts";
 import { todayWIB } from "../time.ts";
+import { dailyValues, daysBetween, weeklyRate } from "./trend.ts";
+
+export type Kondisi = "pagi_puasa" | "sebelum_latihan" | "setelah_makan" | "setelah_olahraga" | "lainnya";
+
+/** Kondisi yang dianggap standar (bisa dibandingkan antar minggu). */
+export const KONDISI_STANDAR: Kondisi[] = ["pagi_puasa", "sebelum_latihan"];
+export const isStandar = (k: Kondisi) => KONDISI_STANDAR.includes(k);
+
+export const LABEL_KONDISI: Record<Kondisi, string> = {
+  sebelum_latihan: "sebelum latihan (gym)",
+  pagi_puasa: "pagi, belum makan",
+  setelah_olahraga: "setelah latihan",
+  setelah_makan: "setelah makan",
+  lainnya: "kondisi lain",
+};
 
 export type Measurement = {
   id: number;
   measuredAt: string;
   date: string; // tanggal WIB
   weightKg: number;
-  condition: "pagi_puasa" | "setelah_makan" | "setelah_olahraga" | "lainnya";
+  condition: Kondisi;
   source: "manual" | "telegram" | "foto_tanita";
   bodyFatPct: number | null;
   muscleMassKg: number | null;
@@ -21,7 +37,7 @@ type Row = {
   id: number;
   measured_at: string;
   weight_kg: number;
-  condition: Measurement["condition"];
+  condition: Kondisi;
   source: Measurement["source"];
   body_fat_pct: number | null;
   muscle_mass_kg: number | null;
@@ -57,15 +73,34 @@ export async function listMeasurements(limit = 400): Promise<Measurement[]> {
   }));
 }
 
-export async function insertMeasurement(weightKg: number, standar: boolean): Promise<void> {
+export async function insertMeasurement(weightKg: number, condition: Kondisi, source: Measurement["source"] = "manual"): Promise<void> {
   must(
     await db().from("body_measurements").insert({
       measured_at: new Date().toISOString(),
       weight_kg: weightKg,
-      condition: standar ? "pagi_puasa" : "lainnya",
-      source: "manual",
+      condition,
+      source,
     }),
   );
+}
+
+/** Laju berat (kg/minggu) dari rata-rata 7 hari terakhir vs 7 hari sebelumnya; null kalau data belum cukup. */
+export async function lajuBeratTerakhir(today: string): Promise<number | null> {
+  const list = await listMeasurements(120);
+  return weeklyRate(
+    dailyValues(list.map((m) => ({ date: m.date, weightKg: m.weightKg }))),
+    today,
+  );
+}
+
+/** Info buat pengingat timbang: sudah timbang minggu ini (Senin-Minggu)? dan berapa hari sejak yang terakhir. */
+export async function statusTimbang(today: string): Promise<{ sudahMingguIni: boolean; hariSejak: number | null }> {
+  const terakhir = (await listMeasurements(1))[0];
+  if (!terakhir) return { sudahMingguIni: false, hariSejak: null };
+  return {
+    sudahMingguIni: terakhir.date >= awalMinggu(today),
+    hariSejak: daysBetween(terakhir.date, today),
+  };
 }
 
 export async function removeMeasurement(id: number): Promise<void> {

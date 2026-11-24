@@ -174,7 +174,7 @@ async function main() {
   const target = await getTargets();
   expect("target: 75 kg dan tanggal Lebaran ada", target.targetKg === 75 && /^\d{4}-\d{2}-\d{2}$/.test(target.lebaranDate));
 
-  await insertMeasurement(71.4, true);
+  await insertMeasurement(71.4, "pagi_puasa");
   const ukur = await listMeasurements();
   const baru = ukur[0];
   expect("timbangan baru tersimpan, kondisi standar", baru.weightKg === 71.4 && baru.condition === "pagi_puasa");

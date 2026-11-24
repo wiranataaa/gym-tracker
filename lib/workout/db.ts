@@ -1,5 +1,5 @@
 import { db, must } from "../supabase.ts";
-import type { ProgramDay, SessionLite } from "../program/queue.ts";
+import type { JenisHari, ProgramDay, SessionLite } from "../program/queue.ts";
 import type { ExerciseSession } from "../program/types.ts";
 
 export type ExerciseRow = {
@@ -9,6 +9,7 @@ export type ExerciseRow = {
   muscle_group: string;
   kind: string;
   increment_kg: number;
+  is_bodyweight: boolean;
 };
 
 export type DayExercise = {
@@ -38,6 +39,7 @@ export type SessionRow = {
   status: "berjalan" | "selesai" | "dilewati";
   energy: number | null;
   started_at: string;
+  cardio_min: number | null;
 };
 
 export type SetRow = {
@@ -57,16 +59,22 @@ export type PlanRow = {
   status: "disarankan" | "dikerjakan" | "dilewati";
 };
 
-const EXERCISE_COLS = "id,name,aliases,muscle_group,kind,increment_kg";
+const EXERCISE_COLS = "id,name,aliases,muscle_group,kind,increment_kg,is_bodyweight";
+const SESSION_COLS = "id,session_date,program_day_id,mode,status,energy,started_at,cardio_min";
 
 export async function loadExercises(): Promise<ExerciseRow[]> {
   return must(await db().from("exercises").select(EXERCISE_COLS).eq("is_active", true).order("id"));
 }
 
 export async function loadProgram(): Promise<{ days: ProgramDay[]; items: DayExercise[] }> {
-  const days = must(
-    await db().from("program_days").select("id,position,name").order("position"),
-  ) as ProgramDay[];
+  const days = (
+    must(await db().from("program_days").select("id,position,name,kind").order("kind").order("position")) as {
+      id: number;
+      position: number;
+      name: string;
+      kind: JenisHari;
+    }[]
+  ).map((d) => ({ id: d.id, position: d.position, name: d.name, kind: d.kind }));
 
   const rows = must(
     await db()
@@ -110,11 +118,11 @@ export async function loadRecentSessions(limit = 30): Promise<(SessionLite & { i
   const rows = must(
     await db()
       .from("workout_sessions")
-      .select("id,program_day_id,status,started_at")
+      .select("id,program_day_id,status,started_at,session_date")
       .order("started_at", { ascending: false })
       .limit(limit),
-  ) as { id: number; program_day_id: number | null; status: SessionLite["status"]; started_at: string }[];
-  return rows.map((r) => ({ id: r.id, programDayId: r.program_day_id, status: r.status, startedAt: r.started_at }));
+  ) as { id: number; program_day_id: number | null; status: SessionLite["status"]; started_at: string; session_date: string }[];
+  return rows.map((r) => ({ id: r.id, programDayId: r.program_day_id, status: r.status, startedAt: r.started_at, date: r.session_date }));
 }
 
 // ---------- Rencana harian (mode normal/singkat, skip) ----------
@@ -138,7 +146,7 @@ export async function getOpenSession(today: string): Promise<SessionRow | null> 
   return must(
     await db()
       .from("workout_sessions")
-      .select("id,session_date,program_day_id,mode,status,energy,started_at")
+      .select(SESSION_COLS)
       .eq("status", "berjalan")
       .eq("session_date", today)
       .order("started_at", { ascending: false })
@@ -169,7 +177,7 @@ export async function startSession(today: string, programDayId: number, mode: "n
     await db()
       .from("workout_sessions")
       .insert({ session_date: today, program_day_id: programDayId, mode })
-      .select("id,session_date,program_day_id,mode,status,energy,started_at")
+      .select(SESSION_COLS)
       .single(),
   );
 }
@@ -219,6 +227,14 @@ export async function logSets(args: {
   );
 }
 
+export async function getSessionById(id: number): Promise<SessionRow | null> {
+  return must(await db().from("workout_sessions").select(SESSION_COLS).eq("id", id).maybeSingle());
+}
+
+export async function saveCardio(sessionId: number, minutes: number | null): Promise<void> {
+  must(await db().from("workout_sessions").update({ cardio_min: minutes }).eq("id", sessionId));
+}
+
 export async function finishSession(sessionId: number, energy: number | null): Promise<void> {
   must(
     await db()
@@ -232,7 +248,7 @@ export async function getFinishedSession(today: string): Promise<SessionRow | nu
   return must(
     await db()
       .from("workout_sessions")
-      .select("id,session_date,program_day_id,mode,status,energy,started_at")
+      .select(SESSION_COLS)
       .eq("status", "selesai")
       .eq("session_date", today)
       .order("started_at", { ascending: false })
@@ -289,7 +305,10 @@ export async function getHistory(exerciseIds: number[], before: string): Promise
 
 // ---------- Timbangan ----------
 
-export async function addWeight(weightKg: number, condition: "pagi_puasa" | "lainnya"): Promise<{ previous: number | null; avg7: number }> {
+export async function addWeight(
+  weightKg: number,
+  condition: "sebelum_latihan" | "pagi_puasa" | "setelah_olahraga" | "setelah_makan" | "lainnya",
+): Promise<{ previous: number | null; avg7: number }> {
   const prev = must(
     await db()
       .from("body_measurements")

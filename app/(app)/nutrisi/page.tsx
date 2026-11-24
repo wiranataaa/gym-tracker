@@ -6,6 +6,8 @@ import { addDays, fmtInt, fmtKg, tglPendek, todayWIB } from "@/lib/time.ts";
 import { getSettings } from "@/lib/workout/db.ts";
 import { KartuMakan, type MakanView } from "./KartuMakan.tsx";
 import { PanelFavorit } from "./PanelFavorit.tsx";
+import { PanelSuplemen } from "./PanelSuplemen.tsx";
+import { hitungHariIni, listSuplemen } from "@/lib/suplemen/db.ts";
 
 const SUMBER: Record<string, string> = { foto: "foto", teks: "teks", favorit: "favorit", manual: "manual" };
 
@@ -20,12 +22,14 @@ export default async function NutrisiPage({ searchParams }: { searchParams: Prom
   const date = d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today ? d : today;
   const isToday = date === today;
 
-  const [meals, totals, settings, favs, recent] = await Promise.all([
+  const [meals, totals, settings, favs, recent, suplemen, hitungSup] = await Promise.all([
     listMeals(date),
     dayTotals(date),
     getSettings(),
     listFavorites(),
     recentDays(7, today),
+    listSuplemen(true),
+    hitungHariIni(date),
   ]);
   const fotos = await signedPhotoUrls(meals.map((m) => m.photoPath ?? "").filter(Boolean));
 
@@ -117,6 +121,24 @@ export default async function NutrisiPage({ searchParams }: { searchParams: Prom
             ))}
           </div>
         )}
+      </div>
+
+      <div>
+        <p className="mb-2 px-1 text-sm font-medium text-slate-300">💊 Suplemen</p>
+        <PanelSuplemen
+          bisaCatat={isToday}
+          items={suplemen.map((s) => ({
+            id: s.id,
+            name: s.name,
+            doseDesc: s.doseDesc,
+            kcal: s.kcal,
+            proteinG: s.proteinG,
+            carbsG: s.carbsG,
+            fatG: s.fatG,
+            pengingat: s.pengingat,
+            count: hitungSup.get(s.id) ?? 0,
+          }))}
+        />
       </div>
 
       <div>

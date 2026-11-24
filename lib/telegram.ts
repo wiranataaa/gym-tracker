@@ -36,6 +36,35 @@ export async function sendMessage(chatId: number, text: string, keyboard?: Keybo
   await api("sendMessage", { chat_id: chatId, text: text.slice(0, 4000), reply_markup: markup(keyboard) });
 }
 
+export async function editMessage(chatId: number, messageId: number, text: string, keyboard?: Keyboard): Promise<void> {
+  await api("editMessageText", { chat_id: chatId, message_id: messageId, text: text.slice(0, 4000), reply_markup: markup(keyboard) ?? { inline_keyboard: [] } });
+}
+
+/** Unduh file (foto) yang dikirim ke bot. Maksimal 10 MB. */
+export async function downloadFile(fileId: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  try {
+    const meta = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getFile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file_id: fileId }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const json = (await meta.json()) as { ok: boolean; result?: { file_path?: string; file_size?: number } };
+    const path = json.result?.file_path;
+    if (!json.ok || !path) return null;
+    if ((json.result?.file_size ?? 0) > 10 * 1024 * 1024) return null;
+
+    const res = await fetch(`https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${path}`, { signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) return null;
+    const lower = path.toLowerCase();
+    const mime = lower.endsWith(".png") ? "image/png" : lower.endsWith(".webp") ? "image/webp" : "image/jpeg";
+    return { bytes: new Uint8Array(await res.arrayBuffer()), mime };
+  } catch (err) {
+    console.error("Gagal unduh file Telegram:", String(err));
+    return null;
+  }
+}
+
 export async function answerCallback(callbackQueryId: string, text?: string): Promise<void> {
   await api("answerCallbackQuery", { callback_query_id: callbackQueryId, text });
 }

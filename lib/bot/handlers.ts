@@ -22,9 +22,14 @@ import {
 } from "../workout/db.ts";
 import { buildMenu, formatMenu, getSettings, isWorkoutDay, targetLine, type TodayMenu } from "../workout/menu.ts";
 import { nextProgramDay } from "../program/queue.ts";
+import { handleMakanText, handleNutriCallback, handlePhoto, showFavorites, showProgress } from "./nutrition.ts";
 
 export type Ctx = {
   send: (text: string, keyboard?: Keyboard) => Promise<void>;
+  /** Ganti isi pesan yang tombolnya diklik (kalau ada); kalau nggak ada, kirim pesan baru */
+  edit?: (text: string, keyboard?: Keyboard) => Promise<void>;
+  /** Unduh foto dari Telegram (diisi route; di tes diisi foto palsu) */
+  downloadPhoto?: (fileId: string) => Promise<{ bytes: Uint8Array; mime: string } | null>;
   /** Bisa diisi saat tes supaya "hari ini" nggak bergantung jam asli */
   today?: string;
 };
@@ -37,6 +42,10 @@ const HELP = [
   "/skip — lewati latihan hari ini (antrean nggak maju)",
   "/selesai — tutup sesi",
   "/timbang 71.4 — catat berat badan (tambah kata 'pagi' kalau habis bangun & belum makan)",
+  "📸 Kirim foto makanan — gua hitung kalori dan proteinnya",
+  "/makan nasi putih + ayam bakar + tempe 2 — hitung dari teks",
+  "/fav — catat makanan favorit sekali tap",
+  "/nutrisi — progres kalori dan protein hari ini",
   "",
   "Log set: ketik langsung, contoh",
   "bench 60x10  ·  bench 60x10x3  ·  bench 60 10,10,9  ·  squat 80 8 8 7 rpe8",
@@ -353,13 +362,19 @@ async function logWeight(ctx: Ctx, arg: string): Promise<void> {
 export type BotUpdate = {
   text?: string;
   callbackData?: string;
+  /** file_id foto terbesar yang dikirim, plus keterangannya */
+  photoFileId?: string;
+  caption?: string;
 };
 
 export async function handleBotInput(input: BotUpdate, ctx: Ctx): Promise<void> {
   const today = ctx.today ?? todayWIB();
 
+  if (input.photoFileId) return handlePhoto(ctx, input.photoFileId, input.caption);
+
   if (input.callbackData) {
     const data = input.callbackData;
+    if (await handleNutriCallback(ctx, data)) return;
     if (data === "mulai") return void (await startWorkout(ctx, today));
     if (data === "singkat") return setMode(ctx, today, "singkat");
     if (data === "skip") return skipToday(ctx, today);
@@ -395,6 +410,12 @@ export async function handleBotInput(input: BotUpdate, ctx: Ctx): Promise<void> 
         return askEnergy(ctx, today);
       case "/timbang":
         return logWeight(ctx, rest.join(" "));
+      case "/makan":
+        return handleMakanText(ctx, rest.join(" "));
+      case "/fav":
+        return showFavorites(ctx);
+      case "/nutrisi":
+        return showProgress(ctx);
       default:
         return ctx.send("Perintah itu belum ada. Ketik /bantuan buat daftar yang tersedia.");
     }

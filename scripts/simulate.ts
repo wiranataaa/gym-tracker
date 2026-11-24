@@ -2,9 +2,11 @@
 // Semua data uji dihapus di akhir.
 // Jalankan: node --env-file=.env.local scripts/simulate.ts
 
+import { readFileSync } from "node:fs";
 import { handleBotInput } from "../lib/bot/handlers.ts";
 import { db } from "../lib/supabase.ts";
 import { getTargets, insertMeasurement, listMeasurements, removeMeasurement } from "../lib/body/db.ts";
+import { createDraft, dayTotals, deleteMeal, listMeals, recentDays, setFactor, setStatus, signedPhotoUrls, uploadPhoto } from "../lib/nutrition/db.ts";
 import { dailyValues, outlook } from "../lib/body/trend.ts";
 import { todayWIB } from "../lib/time.ts";
 import { exercisesWithData, getProgress, getSessionDetail, listSessions, updateSet } from "../lib/workout/history.ts";
@@ -13,7 +15,7 @@ const started = new Date().toISOString();
 const dates: string[] = [];
 let failures = 0;
 
-async function say(date: string, input: string | { callback: string }): Promise<string> {
+async function say(date: string, input: string | { callback: string } | { photo: string }): Promise<string> {
   if (!dates.includes(date)) dates.push(date);
   const out: string[] = [];
   const ctx = {
@@ -21,9 +23,15 @@ async function say(date: string, input: string | { callback: string }): Promise<
     send: async (text: string, kb?: { text: string; data: string }[][]) => {
       out.push(text + (kb ? `\n   [tombol: ${kb.flat().map((b) => `${b.text}=${b.data}`).join(" | ")}]` : ""));
     },
+    downloadPhoto: async () => {
+      const file = process.env.SIM_IMAGE;
+      if (!file) return null;
+      return { bytes: new Uint8Array(readFileSync(file)), mime: "image/png" };
+    },
   };
-  const label = typeof input === "string" ? input : `(klik ${input.callback})`;
-  await handleBotInput(typeof input === "string" ? { text: input } : { callbackData: input.callback }, ctx);
+  const label = typeof input === "string" ? input : "callback" in input ? `(klik ${input.callback})` : `(kirim foto "${input.photo}")`;
+  const update = typeof input === "string" ? { text: input } : "callback" in input ? { callbackData: input.callback } : { photoFileId: "sim", caption: input.photo };
+  await handleBotInput(update, ctx);
   const joined = out.join("\n---\n");
   console.log(`\n▶ ${date} Nata: ${label}\n${joined}`);
   return joined;
@@ -36,6 +44,14 @@ function expect(name: string, cond: boolean) {
 
 async function cleanup() {
   const client = db();
+  // Nutrisi: hapus foto di Storage, lalu makan (item ikut terhapus) dan favorit uji
+  const { data: meals } = await client.from("meals").select("id,photo_path").gte("created_at", started);
+  const fotos = (meals ?? []).map((m: { photo_path: string | null }) => m.photo_path).filter(Boolean) as string[];
+  if (fotos.length) await client.storage.from("meal-photos").remove(fotos);
+  if (meals?.length) await client.from("meals").delete().in("id", meals.map((m: { id: number }) => m.id));
+  await client.from("favorite_foods").delete().gte("created_at", started);
+  console.log(`🧹 Nutrisi uji dihapus (${meals?.length ?? 0} makan, ${fotos.length} foto).`);
+
   const { data: sessions } = await client.from("workout_sessions").select("id").gte("started_at", started);
   const ids = (sessions ?? []).map((s: { id: number }) => s.id);
   if (ids.length) await client.from("workout_sessions").delete().in("id", ids);
@@ -165,6 +181,87 @@ async function main() {
   expect("outlook terhitung dari data asli", !!o && o.currentAvg > 60 && o.daysLeft > 0);
   await removeMeasurement(baru.id);
   expect("timbangan uji terhapus", !(await listMeasurements()).some((m) => m.id === baru.id));
+
+  // --- Nutrisi (memanggil Claude beneran, biayanya sekitar sen) ---
+  console.log("\n▶ Nutrisi");
+  const hari = "2026-12-08";
+  r = await say(hari, "/makan nasi putih 1 piring + ayam bakar paha + tempe goreng 2 potong");
+  expect("makan teks: ada total kcal dan protein", /Total: [\d.]+ kcal/.test(r) && r.includes("Protein"));
+  expect("makan teks: ada tombol simpan, porsi, favorit", r.includes("mk:s:") && r.includes("mk:p:") && r.includes("mk:f:"));
+  expect("makan teks: draft belum masuk hitungan", r.includes("belum disimpan"));
+  const mid = /mk:s:(\d+)/.exec(r)?.[1];
+  const kcalAwal = Number(/Total: ([\d.]+) kcal/.exec(r)?.[1]?.replace(/\./g, ""));
+  expect("kalori masuk akal buat makan itu (300-1500)", kcalAwal >= 300 && kcalAwal <= 1500);
+
+  r = await say(hari, { callback: `mk:p:${mid}:2` });
+  const kcal2x = Number(/Total: ([\d.]+) kcal/.exec(r)?.[1]?.replace(/\./g, ""));
+  expect("porsi 2x menggandakan kalori (±2%)", Math.abs(kcal2x - kcalAwal * 2) <= kcalAwal * 0.04);
+  r = await say(hari, { callback: `mk:p:${mid}:1` });
+  expect("porsi balik ke 1x = kalori awal", Number(/Total: ([\d.]+) kcal/.exec(r)?.[1]?.replace(/\./g, "")) === kcalAwal);
+
+  r = await say(hari, { callback: `mk:s:${mid}` });
+  expect("simpan: muncul progres harian", r.includes("Hari ini:") && r.includes("Sisa:"));
+  r = await say(hari, "/nutrisi");
+  expect("/nutrisi menampilkan progres", r.includes("Protein"));
+
+  r = await say(hari, { callback: `mk:f:${mid}` });
+  expect("favorit tersimpan", r.includes("favorit"));
+  r = await say(hari, "/fav");
+  const favId = /mk:u:(\d+)/.exec(r)?.[1];
+  expect("/fav menampilkan tombol favorit", !!favId);
+  r = await say(hari, { callback: `mk:u:${favId}` });
+  expect("favorit sekali tap langsung tersimpan", r.includes("✅") && r.includes("Hari ini:"));
+
+  r = await say(hari, "/makan");
+  expect("/makan tanpa teks memberi contoh", r.includes("Contoh"));
+  r = await say(hari, { callback: `mk:d:${mid}` });
+  expect("buang makanan", r.includes("Dihapus"));
+
+  if (process.env.SIM_IMAGE) {
+    r = await say(hari, { photo: "" });
+    expect("foto bukan makanan ditolak sopan", r.includes("bukan makanan") || r.includes("Total:"));
+  }
+  // --- Halaman Nutrisi di app (query tanpa AI): draft vs tersimpan, porsi, foto bertanda tangan ---
+  console.log("\n▶ Query halaman Nutrisi");
+  const tgl = "2026-12-09";
+  const fotoPath = process.env.SIM_IMAGE ? await uploadPhoto(new Uint8Array(readFileSync(process.env.SIM_IMAGE)), "image/png") : null;
+  const draft = await createDraft({
+    source: "foto",
+    aiModel: "uji",
+    date: tgl,
+    photoPath: fotoPath,
+    data: {
+      ada_makanan: true,
+      ringkasan: "Nasi uji",
+      item: [{ nama: "Nasi putih", porsi_g: 200, kcal: 260, protein_g: 5, karbo_g: 57, lemak_g: 0.5, catatan: "" }],
+      kcal_min: 230,
+      kcal_max: 300,
+      keyakinan: "sedang",
+      pertanyaan: "",
+    },
+  });
+  expect("draft: ada di daftar tapi belum masuk total harian", (await listMeals(tgl)).length === 1 && (await dayTotals(tgl)).kcal === 0);
+  await setStatus(draft.id, "tersimpan");
+  expect("disimpan: masuk total harian (260 kcal)", (await dayTotals(tgl)).kcal === 260);
+  const x15 = await setFactor(draft.id, 1.5);
+  expect("porsi 1,5x: 390 kcal, kisaran 345-450", x15?.kcal === 390 && x15?.kcalMin === 345 && x15?.kcalMax === 450);
+  expect("total harian ikut porsi (390)", (await dayTotals(tgl)).kcal === 390);
+  expect("7 hari terakhir memuat tanggal itu", (await recentDays(30, "2026-12-09")).some((x) => x.date === tgl && x.kcal === 390));
+  if (fotoPath) {
+    const urls = await signedPhotoUrls([fotoPath]);
+    const res = await fetch(urls.get(fotoPath) ?? "http://invalid.invalid");
+    expect("foto: tanda tangan URL bisa dibuka (image)", res.ok && (res.headers.get("content-type") ?? "").startsWith("image/"));
+    const publik = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/meal-photos/${fotoPath}`);
+    expect("foto: URL publik tanpa tanda tangan ditolak (bucket privat)", !publik.ok);
+  }
+  await deleteMeal(draft.id);
+  expect("hapus makanan: hilang dari daftar", (await listMeals(tgl)).length === 0);
+
+  const biaya = await db().from("ai_usage_log").select("feature,input_tokens,output_tokens,est_cost_usd").gte("created_at", started);
+  const rows = (biaya.data ?? []) as { feature: string; input_tokens: number; output_tokens: number; est_cost_usd: number }[];
+  const total = rows.reduce((a, x) => a + Number(x.est_cost_usd), 0);
+  console.log(`  💲 ${rows.length} panggilan AI, perkiraan biaya $${total.toFixed(4)}`);
+  expect("biaya AI tercatat di ai_usage_log", rows.length >= 1);
 }
 
 main()

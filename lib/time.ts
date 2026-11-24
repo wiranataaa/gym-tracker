@@ -30,6 +30,11 @@ export function tglSingkat(date: string): string {
   return `${parseInt(date.slice(8, 10), 10)} ${BULAN[parseInt(date.slice(5, 7), 10) - 1]}`;
 }
 
+/** "2027-03-10" -> "10 Mar 2027" */
+export function tglLengkap(date: string): string {
+  return `${tglSingkat(date)} ${date.slice(0, 4)}`;
+}
+
 /** Geser tanggal "YYYY-MM-DD" sebanyak n hari. */
 export function addDays(date: string, n: number): string {
   const t = Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10)) + n * 86_400_000;

@@ -4,6 +4,9 @@
 
 import { handleBotInput } from "../lib/bot/handlers.ts";
 import { db } from "../lib/supabase.ts";
+import { getTargets, insertMeasurement, listMeasurements, removeMeasurement } from "../lib/body/db.ts";
+import { dailyValues, outlook } from "../lib/body/trend.ts";
+import { todayWIB } from "../lib/time.ts";
 import { exercisesWithData, getProgress, getSessionDetail, listSessions, updateSet } from "../lib/workout/history.ts";
 
 const started = new Date().toISOString();
@@ -37,7 +40,7 @@ async function cleanup() {
   const ids = (sessions ?? []).map((s: { id: number }) => s.id);
   if (ids.length) await client.from("workout_sessions").delete().in("id", ids);
   await client.from("daily_plans").delete().in("plan_date", dates);
-  await client.from("body_measurements").delete().eq("source", "telegram").gte("created_at", started);
+  await client.from("body_measurements").delete().gte("created_at", started);
   console.log(`\n🧹 Data uji dihapus (${ids.length} sesi, ${dates.length} tanggal).`);
 }
 
@@ -143,6 +146,25 @@ async function main() {
       .find((e) => e.name === "Bench Press")!.sets[0];
     expect("edit set tersimpan (66 kg, RPE 9)", after.weightKg === 66 && after.rpe === 9);
   }
+
+  // --- Halaman Badan ---
+  console.log("\n▶ Query Badan");
+  const target = await getTargets();
+  expect("target: 75 kg dan tanggal Lebaran ada", target.targetKg === 75 && /^\d{4}-\d{2}-\d{2}$/.test(target.lebaranDate));
+
+  await insertMeasurement(71.4, true);
+  const ukur = await listMeasurements();
+  const baru = ukur[0];
+  expect("timbangan baru tersimpan, kondisi standar", baru.weightKg === 71.4 && baru.condition === "pagi_puasa");
+  expect("tanggal timbangan = hari ini WIB", baru.date === todayWIB());
+  const baseline = ukur.find((m) => m.bodyFatPct != null);
+  expect("baseline Tanita (body fat 19,5%) terbaca", baseline?.bodyFatPct === 19.5 && baseline?.muscleMassKg === 54.25);
+
+  const harian = dailyValues(ukur.map((m) => ({ date: m.date, weightKg: m.weightKg })));
+  const o = outlook({ daily: harian, today: todayWIB(), targetKg: target.targetKg, targetDate: target.lebaranDate });
+  expect("outlook terhitung dari data asli", !!o && o.currentAvg > 60 && o.daysLeft > 0);
+  await removeMeasurement(baru.id);
+  expect("timbangan uji terhapus", !(await listMeasurements()).some((m) => m.id === baru.id));
 }
 
 main()

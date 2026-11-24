@@ -110,10 +110,15 @@ test("resolve: nggak ketemu -> none", () => {
   assert.equal(id(""), "none");
 });
 
+test("resolve: 'deadlift' nggak boleh diam-diam jadi 'Romanian Deadlift'", () => {
+  const r = resolveExercise("deadlift", [{ id: 9, name: "Romanian Deadlift", aliases: ["rdl", "romanian deadlift"] }]);
+  assert.equal(r.kind, "none");
+});
+
 test("resolve: ambigu kalau beberapa cocok sama kuat", () => {
-  const r = resolveExercise("row", [
+  const r = resolveExercise("cable", [
     { id: 1, name: "Cable Row", aliases: [] },
-    { id: 2, name: "Dumbbell Row", aliases: [] },
+    { id: 2, name: "Cable Curl", aliases: [] },
   ]);
   assert.equal(r.kind, "ambiguous");
 });

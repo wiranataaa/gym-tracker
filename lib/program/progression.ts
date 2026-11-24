@@ -17,6 +17,11 @@ function clean(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** Tampilan berat ala Indonesia (koma desimal) untuk teks penjelasan. */
+function kg(n: number): string {
+  return String(clean(n)).replace(".", ",");
+}
+
 /** Langkah pembulatan: pelat barbell terkecil 2,5 kg, dumbbell ikut langkahnya. */
 export function roundingStep(incrementKg: number): number {
   return incrementKg > 2.5 ? 2.5 : incrementKg;
@@ -108,7 +113,7 @@ export function computeTarget(
       reps: clamp(minReps, scheme.repMin, scheme.repMax),
       sets: scheme.sets,
       reason: long ? "balik_libur_lama" : "balik_libur_sebentar",
-      note: `Udah ${days} hari nggak latihan gerakan ini. Mulai ±${Math.round(factor * 100)}% dari ${top.weight} kg, nanti naik bertahap.`,
+      note: `Udah ${days} hari nggak latihan gerakan ini. Mulai ±${Math.round(factor * 100)}% dari ${kg(top.weight)} kg, nanti naik bertahap.`,
     };
   }
 
@@ -123,7 +128,7 @@ export function computeTarget(
       reps: scheme.repMin,
       sets: scheme.sets,
       reason: "turun_beban",
-      note: `2 sesi berturut-turut belum nyampe ${scheme.repMin} rep di ${top.weight} kg. Turun dulu biar tekniknya rapi, nanti naik lagi.`,
+      note: `2 sesi berturut-turut belum nyampe ${scheme.repMin} rep di ${kg(top.weight)} kg. Turun dulu biar tekniknya rapi, nanti naik lagi.`,
     };
   }
 
@@ -134,7 +139,7 @@ export function computeTarget(
       reps: scheme.repMin,
       sets: scheme.sets,
       reason: "naik_beban",
-      note: `Semua set udah ${scheme.repMax} rep di ${top.weight} kg. Naik ke ${clean(top.weight + incrementKg)} kg.`,
+      note: `Semua set udah ${scheme.repMax} rep di ${kg(top.weight)} kg. Naik ke ${kg(top.weight + incrementKg)} kg.`,
     };
   }
 
@@ -149,8 +154,8 @@ export function computeTarget(
     reason: allAtTopReps ? "tahan_beban" : "tambah_rep",
     note: allAtTopReps
       ? incomplete
-        ? `Rep udah di batas atas tapi setnya baru ${top.sets.length} dari ${scheme.sets}. Lengkapin dulu di ${top.weight} kg.`
-        : `Rep udah di batas atas tapi RPE masih tinggi. Tahan di ${top.weight} kg sampai kerasa lebih ringan.`
-      : `Tahan di ${top.weight} kg, target ${reps} rep tiap set (kemarin terendah ${minReps}).`,
+        ? `Rep udah di batas atas tapi setnya baru ${top.sets.length} dari ${scheme.sets}. Lengkapin dulu di ${kg(top.weight)} kg.`
+        : `Rep udah di batas atas tapi RPE masih tinggi. Tahan di ${kg(top.weight)} kg sampai kerasa lebih ringan.`
+      : `Tahan di ${kg(top.weight)} kg, target ${reps} rep tiap set (kemarin terendah ${minReps}).`,
   };
 }

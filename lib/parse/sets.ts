@@ -105,10 +105,11 @@ export function resolveExercise(query: string, exercises: ExerciseRef[]): Resolv
   if (!q) return { kind: "none" };
 
   const names = (e: ExerciseRef) => [e.name, ...e.aliases].map(normalize);
+  // Sengaja TIDAK ada pencocokan "mengandung kata": "deadlift" nggak boleh diam-diam
+  // dicatat sebagai "Romanian Deadlift" (gerakan beda).
   const tiers: ((n: string) => boolean)[] = [
     (n) => n === q,
     (n) => q.length >= 3 && n.startsWith(q),
-    (n) => q.length >= 3 && n.includes(q),
   ];
 
   for (const matches of tiers) {

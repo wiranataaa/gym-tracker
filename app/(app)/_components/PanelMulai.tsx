@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { SARAN_LATIHAN_RAMADAN } from "@/lib/ramadan/ramadan.ts";
 import { fmtInt, fmtKg } from "@/lib/time.ts";
 import type { TodayView } from "@/lib/workout/today.ts";
 import { mulaiLatihan, skipHariIni, ubahMode } from "../actions.ts";
@@ -62,8 +63,9 @@ export function PanelMulai({ view }: { view: Siap }) {
         </div>
 
         <p className="mt-3 text-xs text-slate-400">
-          🎯 Target hari ini: {fmtInt(view.targetKcal)} kcal · protein {view.targetProteinG} g
+          🎯 Target hari ini: {fmtInt(view.targetKcal)} kcal{view.ramadan ? " (maintenance, mode Ramadan)" : ""} · protein {view.targetProteinG} g
         </p>
+        {view.ramadan && <p className="mt-2 rounded-xl bg-indigo-400/10 p-3 text-xs text-indigo-100">🌙 {SARAN_LATIHAN_RAMADAN}</p>}
       </div>
 
       {error && <p className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}

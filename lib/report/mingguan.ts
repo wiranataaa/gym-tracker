@@ -99,9 +99,10 @@ export async function hitungLaporan(hariMinggu: string): Promise<Laporan> {
     targetProtein: settings.target_protein_g,
   };
 
+  // Yang disesuaikan adalah target biasa (lean bulk). Saat Ramadan targetnya dijaga, nggak diubah otomatis.
   const kalori = {
-    sebelum: settings.target_kcal,
-    ...sesuaikanKalori({ kcalSekarang: settings.target_kcal, lajuMingguIni: laju, lajuMingguLalu: lajuLalu, ramadan: settings.ramadan_mode }),
+    sebelum: settings.target_kcal_normal,
+    ...sesuaikanKalori({ kcalSekarang: settings.target_kcal_normal, lajuMingguIni: laju, lajuMingguLalu: lajuLalu, ramadan: settings.ramadan_aktif }),
   };
 
   return {

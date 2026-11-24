@@ -1,5 +1,7 @@
 import { db, must } from "../supabase.ts";
 import type { JenisHari, ProgramDay, SessionLite } from "../program/queue.ts";
+import { ramadanAktif, type OverrideRamadan } from "../ramadan/ramadan.ts";
+import { todayWIB } from "../time.ts";
 import type { ExerciseSession } from "../program/types.ts";
 
 export type ExerciseRow = {
@@ -23,12 +25,19 @@ export type DayExercise = {
 };
 
 export type Settings = {
+  /** Target kalori EFEKTIF hari ini: maintenance saat Ramadan, selain itu target biasa. */
   target_kcal: number;
+  /** Target kalori biasa (lean bulk), tidak terpengaruh Ramadan. Ini yang disesuaikan otomatis tiap minggu. */
+  target_kcal_normal: number;
+  kcal_maintenance: number;
   target_protein_g: number;
   workout_days: number[];
   target_weight_kg: number;
   sessions_per_week: number;
-  ramadan_mode: boolean;
+  ramadan_aktif: boolean;
+  ramadan_override: OverrideRamadan;
+  ramadan_start: string;
+  lebaran_date: string;
 };
 
 export type SessionRow = {
@@ -104,14 +113,43 @@ export async function loadProgram(): Promise<{ days: ProgramDay[]; items: DayExe
   return { days, items };
 }
 
-export async function getSettings(): Promise<Settings> {
-  return must(
-    await db()
-      .from("settings")
-      .select("target_kcal,target_protein_g,workout_days,target_weight_kg,sessions_per_week,ramadan_mode")
-      .eq("id", 1)
-      .single(),
-  );
+type SettingsRow = {
+  target_kcal: number;
+  kcal_maintenance: number;
+  target_protein_g: number;
+  workout_days: number[];
+  target_weight_kg: number;
+  sessions_per_week: number;
+  ramadan_override: OverrideRamadan;
+  ramadan_start: string;
+  lebaran_date: string;
+};
+
+export async function getSettings(today: string = todayWIB()): Promise<Settings> {
+  const kolomLengkap =
+    "target_kcal,kcal_maintenance,target_protein_g,workout_days,target_weight_kg,sessions_per_week,ramadan_override,ramadan_start,lebaran_date";
+  const kolomLama = "target_kcal,target_protein_g,workout_days,target_weight_kg,sessions_per_week,ramadan_start,lebaran_date";
+
+  let r: SettingsRow;
+  const baru = await db().from("settings").select(kolomLengkap).eq("id", 1).single();
+  if (baru.error) {
+    // Kolom migrasi 007 belum ada (SQL belum dijalankan): pakai nilai bawaan supaya app tetap jalan
+    const lama = must(await db().from("settings").select(kolomLama).eq("id", 1).single()) as Omit<SettingsRow, "kcal_maintenance" | "ramadan_override">;
+    r = { ...lama, kcal_maintenance: 2450, ramadan_override: "auto" };
+  } else {
+    r = baru.data as SettingsRow;
+  }
+  const aktif = ramadanAktif(today, { override: r.ramadan_override, mulai: r.ramadan_start, lebaran: r.lebaran_date });
+  return {
+    ...r,
+    target_kcal_normal: r.target_kcal,
+    target_kcal: aktif ? r.kcal_maintenance : r.target_kcal,
+    ramadan_aktif: aktif,
+  };
+}
+
+export async function setRamadanOverride(v: OverrideRamadan): Promise<void> {
+  must(await db().from("settings").update({ ramadan_override: v, updated_at: new Date().toISOString() }).eq("id", 1));
 }
 
 export async function loadRecentSessions(limit = 30): Promise<(SessionLite & { id: number })[]> {

@@ -69,6 +69,7 @@ export type TodayView =
       timbang: string | null;
       targetKcal: number;
       targetProteinG: number;
+      ramadan: boolean;
     }
   | {
       kind: "berjalan";
@@ -211,5 +212,6 @@ export async function loadTodayView(today: string, force: boolean): Promise<Toda
     timbang,
     targetKcal: settings.target_kcal,
     targetProteinG: settings.target_protein_g,
+    ramadan: menu.ramadan,
   };
 }

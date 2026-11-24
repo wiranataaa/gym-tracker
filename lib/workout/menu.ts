@@ -1,5 +1,6 @@
 import { lajuBeratTerakhir } from "../body/db.ts";
 import { rekomendasiKardio, type Kardio } from "../program/kardio.ts";
+import { kurangiVolumeRamadan, SARAN_LATIHAN_RAMADAN } from "../ramadan/ramadan.ts";
 import { computeTarget } from "../program/progression.ts";
 import { kindOf, pilihHariIni, type JenisHari, type ProgramDay } from "../program/queue.ts";
 import { shortModeExercises } from "../program/shortMode.ts";
@@ -24,6 +25,8 @@ export type TodayMenu = {
   kardio: Kardio;
   /** hari pemulihan (Bonus F): kardio dan core jadi menu utama */
   recovery: boolean;
+  /** mode Ramadan aktif: volume dikurangi, target kalori maintenance */
+  ramadan: boolean;
   /** semua hari program, buat fitur "Ganti menu" */
   pilihan: ProgramDay[];
 };
@@ -79,21 +82,26 @@ export async function buildMenu(today: string, mode: "normal" | "singkat", force
     mode,
     recovery,
     pilihan: days,
-    kardio: rekomendasiKardio({ mode, recovery, lajuBeratKg: laju, ramadan: settings.ramadan_mode }),
-    items: dayItems.map((i) => ({
-      exercise: i.exercise,
-      position: i.position,
-      sets: i.sets,
-      repMin: i.repMin,
-      repMax: i.repMax,
-      target: computeTarget(
-        history.get(i.exercise.id) ?? [],
-        { sets: i.sets, repMin: i.repMin, repMax: i.repMax },
-        i.exercise.increment_kg,
-        today,
-        { bodyweight: i.exercise.is_bodyweight },
-      ),
-    })),
+    ramadan: settings.ramadan_aktif,
+    kardio: rekomendasiKardio({ mode, recovery, lajuBeratKg: laju, ramadan: settings.ramadan_aktif }),
+    items: dayItems.map((i) => {
+      // Saat Ramadan volume dikurangi sedikit (1 set di gerakan non-inti yang >= 3 set)
+      const sets = settings.ramadan_aktif ? kurangiVolumeRamadan(i.sets, i.isCore) : i.sets;
+      return {
+        exercise: i.exercise,
+        position: i.position,
+        sets,
+        repMin: i.repMin,
+        repMax: i.repMax,
+        target: computeTarget(
+          history.get(i.exercise.id) ?? [],
+          { sets, repMin: i.repMin, repMax: i.repMax },
+          i.exercise.increment_kg,
+          today,
+          { bodyweight: i.exercise.is_bodyweight },
+        ),
+      };
+    }),
   };
 }
 
@@ -121,7 +129,8 @@ export function formatMenu(menu: TodayMenu, today: string, settings: Settings): 
   lines.push("");
   lines.push(`🚶 Kardio: ${menu.kardio.deskripsi}${menu.kardio.alasan ? ` (${menu.kardio.alasan})` : ""}`);
   lines.push("");
-  lines.push(`🎯 Hari ini: ${fmtInt(settings.target_kcal)} kcal · protein ${settings.target_protein_g} g`);
+  lines.push(`🎯 Hari ini: ${fmtInt(settings.target_kcal)} kcal${menu.ramadan ? " (maintenance, mode Ramadan)" : ""} · protein ${settings.target_protein_g} g`);
+  if (menu.ramadan) lines.push(`🌙 ${SARAN_LATIHAN_RAMADAN}`);
   lines.push("");
   lines.push("Log set tinggal ketik, contoh: bench 60x10x3. Mau menu lain? Ketik /menu.");
   return lines.join("\n");

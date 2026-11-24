@@ -25,6 +25,7 @@ import { buildMenu, formatMenu, getSettings, isWorkoutDay, SESI_UTAMA_PER_MINGGU
 import { pilihHariIni } from "../program/queue.ts";
 import { bannerTimbang } from "../workout/today.ts";
 import { callbackSuplemen, catatKardio, pilihMenu, showGantiMenu, tampilSuplemen } from "./menuSuplemen.ts";
+import { perintahRamadan } from "./ramadan.ts";
 import { buatKesimpulanSesi } from "../ai/summary.ts";
 import { handleMakanText, handleNutriCallback, handlePhoto, showFavorites, showProgress } from "./nutrition.ts";
 
@@ -47,6 +48,7 @@ const HELP = [
   "/selesai — tutup sesi",
   "/timbang 71.4 gym — catat berat badan (tambah 'gym' kalau timbang di gym sebelum latihan, 'pagi' kalau habis bangun & belum makan)",
   "/menu — ganti menu hari ini (utama A/B/C atau bonus D/E/F buat variasi)",
+  "/ramadan — status mode Ramadan (on / off / auto buat mengubah)",
   "/suplemen — catat creatine dan whey",
   "kardio 20 — catat menit kardio (jalan di treadmill)",
   "📸 Kirim foto makanan — gua hitung kalori dan proteinnya",
@@ -455,6 +457,8 @@ export async function handleBotInput(input: BotUpdate, ctx: Ctx): Promise<void> 
         return showProgress(ctx);
       case "/menu":
         return showGantiMenu(ctx, today);
+      case "/ramadan":
+        return perintahRamadan(ctx, rest.join(" "));
       case "/suplemen":
         return tampilSuplemen(ctx, today);
       case "/kardio":

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { keluar } from "./actions.ts";
 import { NavBawah } from "./_components/NavBawah.tsx";
 
@@ -10,9 +11,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <span className="text-xl">🏋️</span>
           <span className="font-semibold">Gym Tracker</span>
         </div>
-        <form action={keluar}>
-          <button className="rounded-lg px-3 py-1.5 text-sm text-slate-400 active:bg-white/10">Keluar</button>
-        </form>
+        <div className="flex items-center gap-1">
+          <Link href="/pengaturan" aria-label="Pengaturan" className="rounded-lg px-3 py-1.5 text-lg active:bg-white/10">
+            ⚙️
+          </Link>
+          <form action={keluar}>
+            <button className="rounded-lg px-3 py-1.5 text-sm text-slate-400 active:bg-white/10">Keluar</button>
+          </form>
+        </div>
       </header>
 
       {/* pb = tinggi menu bawah (±4rem) + area aman bawah (garis home iPhone) + napas */}

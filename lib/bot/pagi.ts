@@ -7,7 +7,9 @@ import type { Button } from "../telegram.ts";
 import { getSettings } from "../workout/db.ts";
 import { listSessions } from "../workout/history.ts";
 import { handleBotInput, type Ctx } from "./handlers.ts";
+import { hariKeRamadan } from "../ramadan/ramadan.ts";
 import { pengingatTimbang } from "./pengingat.ts";
+import { teksBagiRamadan } from "./ramadan.ts";
 
 export const APP_URL = process.env.APP_URL ?? "https://gym-tracker-nu-two-90.vercel.app";
 
@@ -49,6 +51,14 @@ export async function pesanPagi(ctx: Ctx): Promise<void> {
     }
   } else {
     lines.push("🍽️ Belum ada catatan makan kemarin. Kirim foto makanan ke sini biar kalori dan protein kehitung.");
+  }
+
+  // Mode Ramadan: target maintenance dan pembagian sahur / berbuka / setelah tarawih
+  if (settings.ramadan_aktif) {
+    lines.push("", `🌙 Mode Ramadan: target jaga berat ${fmtInt(settings.target_kcal)} kcal · protein ${settings.target_protein_g} g.`, ...teksBagiRamadan(settings.target_kcal, settings.target_protein_g));
+  } else {
+    const hari = hariKeRamadan(today, settings.ramadan_start);
+    if (hari != null && hari <= 7) lines.push("", `🌙 Ramadan mulai ${hari} hari lagi. Mode Ramadan aktif otomatis (target maintenance, volume latihan dikurangi). Tanggal bisa dicek di app → Pengaturan.`);
   }
 
   // Suplemen yang minta diingatkan (creatine): tinggal tap "udah" kalau sudah diminum

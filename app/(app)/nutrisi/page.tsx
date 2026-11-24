@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireOwner } from "@/lib/auth.ts";
 import { persen, sisa } from "@/lib/nutrition/calc.ts";
+import { bagiRamadan } from "@/lib/ramadan/ramadan.ts";
 import { dayTotals, listFavorites, listMeals, recentDays, signedPhotoUrls } from "@/lib/nutrition/db.ts";
 import { addDays, fmtInt, fmtKg, tglPendek, todayWIB } from "@/lib/time.ts";
 import { getSettings } from "@/lib/workout/db.ts";
@@ -92,6 +93,18 @@ export default async function NutrisiPage({ searchParams }: { searchParams: Prom
           Karbo {fmtKg(totals.carbsG)} g · Lemak {fmtKg(totals.fatG)} g · {totals.count} kali makan tersimpan
         </p>
       </div>
+
+      {settings.ramadan_aktif && (
+        <div className="space-y-2 rounded-2xl border border-indigo-300/20 bg-indigo-400/10 p-4 text-sm">
+          <p className="font-medium">🌙 Mode Ramadan: target maintenance {fmtInt(settings.target_kcal)} kcal</p>
+          {bagiRamadan(settings.target_kcal, settings.target_protein_g).map((p) => (
+            <p key={p.nama} className="text-slate-200">
+              <b>{p.nama}</b>: ±{fmtInt(p.kcal)} kcal · protein ±{p.proteinG} g
+              <span className="block text-xs text-slate-400">{p.saran}</span>
+            </p>
+          ))}
+        </div>
+      )}
 
       {avg && (
         <p className="px-1 text-sm text-slate-400">

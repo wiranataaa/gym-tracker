@@ -11,15 +11,25 @@ function sameSecret(a: string, b: string): boolean {
 }
 
 async function telegram(method: string, payload?: object) {
-  const res = await fetch(
-    `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/${method}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload ?? {}),
-    },
-  );
-  return res.json();
+  try {
+    const res = await fetch(
+      `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/${method}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload ?? {}),
+        signal: AbortSignal.timeout(8000),
+      },
+    );
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { ok: false, http_status: res.status, body: text.slice(0, 200) };
+    }
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
 }
 
 export async function POST(request: Request) {

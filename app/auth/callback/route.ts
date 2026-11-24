@@ -15,7 +15,8 @@ export async function GET(request: Request) {
       if (isOwnerEmail(user?.email)) return NextResponse.redirect(`${url.origin}/`);
       // Login Google berhasil, tapi bukan email pemilik: keluarkan lagi
       await supabase.auth.signOut();
-      return NextResponse.redirect(`${url.origin}/login?error=tidak_diizinkan`);
+      const ownerKosong = !process.env.OWNER_EMAIL?.trim();
+      return NextResponse.redirect(`${url.origin}/login?error=${ownerKosong ? "owner_kosong" : "tidak_diizinkan"}`);
     }
   }
   return NextResponse.redirect(`${url.origin}/login?error=gagal`);

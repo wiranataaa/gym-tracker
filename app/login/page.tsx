@@ -1,7 +1,8 @@
 import { LoginButton } from "./LoginButton";
 
 const PESAN: Record<string, string> = {
-  tidak_diizinkan: "Akun Google itu nggak punya akses. Pakai akun Google yang sama dengan yang didaftarkan.",
+  tidak_diizinkan: "Email akun Google itu beda dengan OWNER_EMAIL di server. Cek ejaan OWNER_EMAIL di Vercel, atau pakai akun Google yang sama.",
+  owner_kosong: "OWNER_EMAIL belum kebaca di server. Isi di Vercel (Settings → Environment Variables) lalu Redeploy.",
   gagal: "Login gagal. Coba lagi.",
 };
 

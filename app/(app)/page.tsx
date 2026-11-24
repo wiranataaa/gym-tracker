@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireOwner } from "@/lib/auth.ts";
 import { namaHari, todayWIB, fmtInt, fmtKg } from "@/lib/time.ts";
 import { loadTodayView } from "@/lib/workout/today.ts";
+import { KesimpulanAI } from "./_components/KesimpulanAI.tsx";
 import { PanelMulai } from "./_components/PanelMulai.tsx";
 import { PanelSkip } from "./_components/PanelSkip.tsx";
 import { Pencatat } from "./_components/Pencatat.tsx";
@@ -55,6 +56,8 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
               <Angka label="Energi" nilai={view.recap.energy ? `${view.recap.energy}/5` : "-"} />
             </div>
           </Kartu>
+
+          <KesimpulanAI teks={view.kesimpulan} />
 
           {view.recap.exercises.map((e) => (
             <Kartu key={e.name}>

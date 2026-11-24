@@ -1,15 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { db } from "../supabase.ts";
+import { logUsage } from "./usage.ts";
 
 // Perkiraan kalori/protein dari foto atau teks makanan.
 // AI cuma menebak gizi per item; penjumlahan dan progres dihitung kode (lib/nutrition/calc.ts).
 
 export const MODEL = "claude-sonnet-5-5";
-// Harga per 1 juta token (USD) buat catatan biaya. Sumber: daftar harga resmi Anthropic.
-const PRICE_IN = 2;
-const PRICE_OUT = 10;
 
 const Item = z.object({
   nama: z.string().describe("Nama makanan dalam bahasa Indonesia, spesifik (mis. 'Ayam bakar paha')"),
@@ -52,18 +49,6 @@ Aturan:
 
 const client = () => new Anthropic({ timeout: 25_000, maxRetries: 1 });
 
-async function logUsage(feature: string, inputTokens: number, outputTokens: number): Promise<void> {
-  const cost = (inputTokens * PRICE_IN + outputTokens * PRICE_OUT) / 1_000_000;
-  const { error } = await db().from("ai_usage_log").insert({
-    feature,
-    model: MODEL,
-    input_tokens: inputTokens,
-    output_tokens: outputTokens,
-    est_cost_usd: Math.round(cost * 1_000_000) / 1_000_000,
-  });
-  if (error) console.error("Gagal catat biaya AI:", error.message);
-}
-
 async function ask(content: Anthropic.MessageParam["content"], feature: string): Promise<EstimateResult> {
   try {
     const response = await client().messages.parse({
@@ -76,7 +61,7 @@ async function ask(content: Anthropic.MessageParam["content"], feature: string):
 
     const inputTokens = response.usage.input_tokens;
     const outputTokens = response.usage.output_tokens;
-    await logUsage(feature, inputTokens, outputTokens);
+    await logUsage(feature, MODEL, inputTokens, outputTokens);
 
     if (response.stop_reason === "refusal") return { ok: false, reason: "AI menolak memproses ini. Coba foto atau teks lain." };
     if (response.stop_reason === "max_tokens") return { ok: false, reason: "Jawaban AI kepotong. Coba lagi." };

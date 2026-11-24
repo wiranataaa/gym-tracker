@@ -4,6 +4,8 @@
 
 import { readFileSync } from "node:fs";
 import { pesanPagi } from "../lib/bot/pagi.ts";
+import { ambilKesimpulan, buatKesimpulanSesi, tulisKesimpulan } from "../lib/ai/summary.ts";
+import { buildSummaryInput } from "../lib/workout/summaryData.ts";
 import type { Keyboard } from "../lib/telegram.ts";
 import { handleBotInput } from "../lib/bot/handlers.ts";
 import { db } from "../lib/supabase.ts";
@@ -52,6 +54,7 @@ async function cleanup() {
   if (fotos.length) await client.storage.from("meal-photos").remove(fotos);
   if (meals?.length) await client.from("meals").delete().in("id", meals.map((m: { id: number }) => m.id));
   await client.from("favorite_foods").delete().gte("created_at", started);
+  await client.from("daily_summaries").delete().in("summary_date", dates);
   console.log(`🧹 Nutrisi uji dihapus (${meals?.length ?? 0} makan, ${fotos.length} foto).`);
 
   const { data: sessions } = await client.from("workout_sessions").select("id").gte("started_at", started);
@@ -86,6 +89,7 @@ async function main() {
   const sessionId = /energi:(\d+):1/.exec(r)?.[1];
   r = await say("2026-12-01", { callback: `energi:${sessionId}:4` });
   expect("rekap latihan", r.includes("Latihan selesai") && r.includes("volume"));
+  expect("kesimpulan ikut dikirim setelah rekap", r.includes("Lagi nulis kesimpulan") && r.includes("Kesimpulan Selasa") && r.includes("Yang berubah"));
   expect("antrean maju ke B", r.includes("Full Body B"));
 
   // --- Rabu 2 Des: skip, antrean nggak maju ---
@@ -275,6 +279,28 @@ async function main() {
   await deleteMeal(draft.id);
   expect("hapus makanan: hilang dari daftar", (await listMeals(tgl)).length === 0);
 
+  // --- Kesimpulan AI: data dari kode, pemeriksa angka, dan cadangan kalau AI gagal ---
+  console.log("\n▶ Kesimpulan AI");
+  const acuan = uji.find((s) => s.date === "2026-12-07");
+  const masuk = acuan ? await buildSummaryInput(acuan.id) : null;
+  expect("data kesimpulan: gerakan, volume per otot, besok", !!masuk && masuk.gerakan.length > 0 && masuk.volume_per_otot_kg.length > 0 && !!masuk.besok.hari);
+  const bench7 = masuk?.gerakan.find((g) => g.nama === "Bench Press");
+  expect("data kesimpulan: bench naik beban dan PR terdeteksi (kode, bukan AI)", bench7?.perbandingan === "beban_naik" && bench7?.pr === true);
+
+  if (masuk) {
+    const kunciAsli = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "sk-ant-kunci-salah";
+    const cad = await tulisKesimpulan(masuk);
+    process.env.ANTHROPIC_API_KEY = kunciAsli;
+    expect("AI gagal (kunci salah) -> cadangan tanpa AI tetap jadi", !cad.pakaiAi && cad.text.includes("Yang berubah") && cad.text.includes("Besok"));
+
+    const ai = await tulisKesimpulan(masuk);
+    console.log(ai.text);
+    expect("AI sukses dan lolos pemeriksaan angka (nggak ada angka karangan)", ai.pakaiAi);
+    const simpan = await buatKesimpulanSesi(acuan!.id);
+    expect("kesimpulan tersimpan di daily_summaries", !!simpan && (await ambilKesimpulan("2026-12-07")) === simpan.text);
+  }
+
   const biaya = await db().from("ai_usage_log").select("feature,input_tokens,output_tokens,est_cost_usd").gte("created_at", started);
   const rows = (biaya.data ?? []) as { feature: string; input_tokens: number; output_tokens: number; est_cost_usd: number }[];
   const total = rows.reduce((a, x) => a + Number(x.est_cost_usd), 0);
@@ -282,7 +308,25 @@ async function main() {
   expect("biaya AI tercatat di ai_usage_log", rows.length >= 1);
 }
 
-main()
+// PENGAMAN: simulasi memakai database yang SAMA dengan data asli dan menutup "sesi lama" berdasarkan
+// tanggal palsu. Kalau sudah ada data latihan/makan asli, jangan jalan (kecuali dipaksa).
+async function pastikanDatabaseKosong() {
+  const client = db();
+  const hitung = async (tabel: string) =>
+    (await client.from(tabel).select("id", { count: "exact", head: true })).count ?? 0;
+  const [sesi, makan] = await Promise.all([hitung("workout_sessions"), hitung("meals")]);
+  if ((sesi > 0 || makan > 0) && process.env.FORCE_SIM !== "1") {
+    console.error(
+      `\n⛔ Simulasi dibatalkan: database sudah berisi data asli (${sesi} sesi latihan, ${makan} makan).\n` +
+        "   Simulasi bisa menutup sesi yang lagi berjalan dan mengacaukan antrean. Pakai project Supabase terpisah\n" +
+        "   buat tes, atau jalankan dengan FORCE_SIM=1 kalau yakin datanya cuma data uji.",
+    );
+    process.exit(2);
+  }
+}
+
+pastikanDatabaseKosong()
+  .then(main)
   .catch((e) => {
     failures++;
     console.error("\n💥 Error:", e);

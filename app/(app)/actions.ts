@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { buatKesimpulanSesi } from "@/lib/ai/summary.ts";
 import { requireOwner, supabaseAuth } from "@/lib/auth.ts";
 import { todayWIB } from "@/lib/time.ts";
 import {
@@ -110,6 +112,17 @@ export async function selesaiLatihan(energy: number): Promise<Result> {
   const open = await getOpenSession(todayWIB());
   if (!open) return { ok: false, error: "Nggak ada sesi yang jalan" };
   await finishSession(open.id, energy);
+
+  // Kesimpulan AI ditulis di belakang layar; halaman menampilkannya begitu siap
+  const sessionId = open.id;
+  after(async () => {
+    try {
+      await buatKesimpulanSesi(sessionId);
+    } catch (err) {
+      console.error("Kesimpulan gagal:", err);
+    }
+  });
+
   refresh();
   return { ok: true };
 }

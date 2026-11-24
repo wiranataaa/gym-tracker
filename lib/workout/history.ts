@@ -70,6 +70,7 @@ export async function listSessions(limit = 40): Promise<SessionSummary[]> {
 export type SessionDetail = {
   id: number;
   date: string;
+  programDayId: number | null;
   dayName: string;
   mode: "normal" | "singkat";
   status: "berjalan" | "selesai" | "dilewati";
@@ -125,6 +126,7 @@ export async function getSessionDetail(id: number): Promise<SessionDetail | null
   return {
     id: s.id,
     date: s.session_date,
+    programDayId: s.program_day_id,
     dayName: (s.program_day_id && names.get(s.program_day_id)) || "Latihan",
     mode: s.mode,
     status: s.status,

@@ -1,3 +1,4 @@
+import { ambilKesimpulan } from "../ai/summary.ts";
 import { roundingStep } from "../program/progression.ts";
 import { nextProgramDay } from "../program/queue.ts";
 import { isoWeekday } from "../time.ts";
@@ -48,7 +49,7 @@ export type TodayView =
   | { kind: "skip" }
   | { kind: "siap"; dayName: string; mode: "normal" | "singkat"; exercises: ExerciseView[]; targetKcal: number; targetProteinG: number }
   | { kind: "berjalan"; dayName: string; mode: "normal" | "singkat"; sessionId: number; exercises: ExerciseView[]; logged: LoggedSet[] }
-  | { kind: "selesai"; recap: Recap };
+  | { kind: "selesai"; recap: Recap; kesimpulan: string | null };
 
 function toView(menu: NonNullable<Awaited<ReturnType<typeof buildMenu>>>): ExerciseView[] {
   return menu.items.map((p) => ({
@@ -127,7 +128,10 @@ export async function loadTodayView(today: string, force: boolean): Promise<Toda
   }
 
   const finished = await getFinishedSession(today);
-  if (finished) return { kind: "selesai", recap: await buildRecap(finished, today) };
+  if (finished) {
+    const [recap, kesimpulan] = await Promise.all([buildRecap(finished, today), ambilKesimpulan(today)]);
+    return { kind: "selesai", recap, kesimpulan };
+  }
 
   if (plan?.status === "dilewati") return { kind: "skip" };
 

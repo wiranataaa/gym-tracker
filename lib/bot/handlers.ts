@@ -22,6 +22,7 @@ import {
 } from "../workout/db.ts";
 import { buildMenu, formatMenu, getSettings, isWorkoutDay, targetLine, type TodayMenu } from "../workout/menu.ts";
 import { nextProgramDay } from "../program/queue.ts";
+import { buatKesimpulanSesi } from "../ai/summary.ts";
 import { handleMakanText, handleNutriCallback, handlePhoto, showFavorites, showProgress } from "./nutrition.ts";
 
 export type Ctx = {
@@ -212,10 +213,19 @@ async function closeWorkout(ctx: Ctx, today: string, sessionId: number, energy: 
   const next = nextProgramDay(days, sessions);
   if (next) lines.push(`Berikutnya di antrean: ${next.name}`);
   lines.push(`🎯 Jangan lupa nutrisi: ${fmtInt(settings.target_kcal)} kcal · protein ${settings.target_protein_g} g`);
-  lines.push("");
-  lines.push("(Kesimpulan AI menyusul di update berikutnya.)");
-
   await ctx.send(lines.join("\n"));
+
+  // Kesimpulan: angka dihitung kode, AI cuma menulis; kalau AI gagal ada versi tanpa AI
+  if (working.length > 0) {
+    await ctx.send("🧠 Lagi nulis kesimpulan…");
+    try {
+      const k = await buatKesimpulanSesi(sessionId);
+      await ctx.send(k ? k.text : "Kesimpulannya belum bisa dibuat.");
+    } catch (err) {
+      console.error("Kesimpulan gagal:", err);
+      await ctx.send("Kesimpulannya belum bisa dibuat sekarang. Rekap di atas tetap tersimpan.");
+    }
+  }
 }
 
 async function showNext(ctx: Ctx, today: string): Promise<void> {

@@ -26,6 +26,10 @@ import { pilihHariIni } from "../program/queue.ts";
 import { bannerTimbang } from "../workout/today.ts";
 import { callbackSuplemen, catatKardio, pilihMenu, showGantiMenu, tampilSuplemen } from "./menuSuplemen.ts";
 import { perintahRamadan } from "./ramadan.ts";
+import { callbackDeload, perintahDeload } from "./deload.ts";
+import { callbackTanita, handleTanita, KATA_TANITA } from "./tanita.ts";
+import { tebakSetBebas } from "../ai/setBebas.ts";
+import { bacaKodeSet, kodeSet } from "./kodeSet.ts";
 import { buatKesimpulanSesi } from "../ai/summary.ts";
 import { handleMakanText, handleNutriCallback, handlePhoto, showFavorites, showProgress } from "./nutrition.ts";
 
@@ -49,9 +53,12 @@ const HELP = [
   "/timbang 71.4 gym — catat berat badan (tambah 'gym' kalau timbang di gym sebelum latihan, 'pagi' kalau habis bangun & belum makan)",
   "/menu — ganti menu hari ini (utama A/B/C atau bonus D/E/F buat variasi)",
   "/ramadan — status mode Ramadan (on / off / auto buat mengubah)",
+  "/deload — saran minggu ringan (deload); /deload mulai atau /deload selesai",
+  "Kalimat bebas juga bisa, contoh: tadi bench 60 kilo 10 kali 3 set (gua konfirmasi dulu sebelum dicatat)",
   "/suplemen — catat creatine dan whey",
   "kardio 20 — catat menit kardio (jalan di treadmill)",
   "📸 Kirim foto makanan — gua hitung kalori dan proteinnya",
+  "⚖️ Kirim screenshot layar Tanita dengan caption 'tanita' — gua baca semua angka komposisi badan (konfirmasi dulu sebelum disimpan)",
   "/makan nasi putih + ayam bakar + tempe 2 — hitung dari teks",
   "/fav — catat makanan favorit sekali tap",
   "/nutrisi — progres kalori dan protein hari ini",
@@ -265,14 +272,60 @@ function pickNext(menu: TodayMenu, doneSets: { exercise_id: number; is_warmup: b
   return menu.items.find((p) => doneSets.filter((s) => s.exercise_id === p.exercise.id && !s.is_warmup).length < p.sets);
 }
 
-async function logText(ctx: Ctx, today: string, text: string): Promise<void> {
-  const parsed = parseSetText(text);
-  if (!parsed.ok) {
+const BANTUAN_FORMAT = "Format nggak kebaca 🤔 Coba kayak gini:\nbench 60x10x3\nbench 60 10,10,9\nsquat 80 8 8 7 rpe8\n\nKalau mau cek perintah, ketik /bantuan.";
+
+/** Format cepat gagal: coba kalimat bebas lewat AI kecil, lalu minta konfirmasi Nata (nggak langsung disimpan). */
+async function tanyaKalimatBebas(ctx: Ctx, text: string): Promise<void> {
+  // Pesan tanpa angka atau terlalu panjang jelas bukan laporan set: nggak perlu panggil AI
+  if (!/\d/.test(text) || text.length > 200) {
+    await ctx.send(BANTUAN_FORMAT);
+    return;
+  }
+  const exercises = await loadExercises();
+  const tebakan = await tebakSetBebas(text, exercises.map((e) => ({ nama: e.name, bodyweight: e.is_bodyweight })));
+  if (!tebakan.ok) {
     await ctx.send(
-      "Format nggak kebaca 🤔 Coba kayak gini:\nbench 60x10x3\nbench 60 10,10,9\nsquat 80 8 8 7 rpe8\n\nKalau mau cek perintah, ketik /bantuan.",
+      tebakan.alasan === "tidak_jelas"
+        ? `Gua kurang yakin maksudnya. ${BANTUAN_FORMAT}`
+        : tebakan.alasan === "error"
+          ? `AI lagi nggak bisa bantu baca kalimat itu. ${BANTUAN_FORMAT}`
+          : BANTUAN_FORMAT,
     );
     return;
   }
+  const s = tebakan.set;
+  const ex = exercises.find((e) => e.name === s.gerakan)!;
+  const kode = kodeSet({ exerciseId: ex.id, bebanKg: s.bebanKg, reps: s.reps, rpe: s.rpe, pemanasan: s.pemanasan });
+  await ctx.send(
+    `Maksud lo: ${ex.name}${s.pemanasan ? " (pemanasan)" : ""} ${fmtKg(s.bebanKg)} kg × ${s.reps.join(", ")}${s.rpe ? ` · RPE ${s.rpe}` : ""}?`,
+    [[{ text: "✅ Catat", data: kode }, { text: "❌ Bukan", data: "ft:x" }]],
+  );
+}
+
+/** Tombol konfirmasi set dari kalimat bebas ("ft:..."). true kalau milik fitur ini. */
+async function callbackKalimatBebas(ctx: Ctx, today: string, data: string): Promise<boolean> {
+  if (data === "ft:x") {
+    await ctx.send("Oke, nggak dicatat. Ketik ulang pakai format cepat, contoh: bench 60x10x3");
+    return true;
+  }
+  if (!data.startsWith("ft:")) return false;
+  const s = bacaKodeSet(data);
+  if (!s) {
+    await ctx.send("Kodenya nggak valid. Ketik ulang setmu ya.");
+    return true;
+  }
+  const exercise = (await loadExercises()).find((e) => e.id === s.exerciseId);
+  if (!exercise) {
+    await ctx.send("Gerakannya nggak ketemu.");
+    return true;
+  }
+  await catatSetKeSesi(ctx, today, exercise, { weightKg: s.bebanKg, reps: s.reps, rpe: s.rpe, isWarmup: s.pemanasan });
+  return true;
+}
+
+async function logText(ctx: Ctx, today: string, text: string): Promise<void> {
+  const parsed = parseSetText(text);
+  if (!parsed.ok) return tanyaKalimatBebas(ctx, text);
 
   const exercises = await loadExercises();
   const found = resolveExercise(parsed.exerciseQuery, exercises);
@@ -285,7 +338,16 @@ async function logText(ctx: Ctx, today: string, text: string): Promise<void> {
     return;
   }
   const exercise: ExerciseRow = exercises.find((e) => e.id === found.exercise.id)!;
+  return catatSetKeSesi(ctx, today, exercise, parsed);
+}
 
+/** Simpan set ke sesi hari ini (sesi dimulai otomatis kalau belum ada), lalu balas dengan perbandingan dan PR. */
+async function catatSetKeSesi(
+  ctx: Ctx,
+  today: string,
+  exercise: ExerciseRow,
+  parsed: { weightKg: number; reps: number[]; rpe: number | null; isWarmup: boolean },
+): Promise<void> {
   // Kalau belum /mulai, sesi dimulai otomatis (input secepat mungkin)
   await closeStaleSessions(today);
   let session = await getOpenSession(today);
@@ -405,10 +467,17 @@ export type BotUpdate = {
 export async function handleBotInput(input: BotUpdate, ctx: Ctx): Promise<void> {
   const today = ctx.today ?? todayWIB();
 
-  if (input.photoFileId) return handlePhoto(ctx, input.photoFileId, input.caption);
+  if (input.photoFileId) {
+    // Foto dengan caption "tanita" = layar timbangan komposisi badan; selain itu dianggap makanan
+    if (KATA_TANITA.test(input.caption ?? "")) return handleTanita(ctx, input.photoFileId, input.caption);
+    return handlePhoto(ctx, input.photoFileId, input.caption);
+  }
 
   if (input.callbackData) {
     const data = input.callbackData;
+    if (await callbackTanita(ctx, data)) return;
+    if (await callbackDeload(ctx, data)) return;
+    if (await callbackKalimatBebas(ctx, today, data)) return;
     if (await handleNutriCallback(ctx, data)) return;
     if (data === "mulai") return void (await startWorkout(ctx, today));
     if (data === "singkat") return setMode(ctx, today, "singkat");
@@ -459,6 +528,8 @@ export async function handleBotInput(input: BotUpdate, ctx: Ctx): Promise<void> 
         return showGantiMenu(ctx, today);
       case "/ramadan":
         return perintahRamadan(ctx, rest.join(" "));
+      case "/deload":
+        return perintahDeload(ctx, rest.join(" "));
       case "/suplemen":
         return tampilSuplemen(ctx, today);
       case "/kardio":

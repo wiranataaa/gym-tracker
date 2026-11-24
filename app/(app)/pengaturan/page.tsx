@@ -2,7 +2,9 @@ import Link from "next/link";
 import { requireOwner } from "@/lib/auth.ts";
 import { ambilPengaturan, biayaBulanIni } from "@/lib/pengaturan/db.ts";
 import { fmtInt, todayWIB } from "@/lib/time.ts";
+import { cekDeload } from "@/lib/report/deloadCek.ts";
 import { FormPengaturan } from "./FormPengaturan.tsx";
+import { KartuDeload } from "./KartuDeload.tsx";
 
 // Perkiraan kurs buat tampilan saja; biaya aslinya dalam USD di tagihan Anthropic.
 const KURS_IDR = 16500;
@@ -16,7 +18,7 @@ const EKSPOR = [
 export default async function PengaturanPage() {
   await requireOwner();
   const today = todayWIB();
-  const [awal, biaya] = await Promise.all([ambilPengaturan(), biayaBulanIni(today)]);
+  const [awal, biaya, deload] = await Promise.all([ambilPengaturan(), biayaBulanIni(today), cekDeload(today)]);
 
   return (
     <div className="space-y-4">
@@ -26,6 +28,8 @@ export default async function PengaturanPage() {
         </Link>
         <h1 className="text-2xl font-semibold">Pengaturan</h1>
       </div>
+
+      <KartuDeload aktif={deload.aktif} sampai={deload.sampai} perlu={deload.perlu} alasan={deload.alasan} />
 
       <FormPengaturan awal={awal} />
 

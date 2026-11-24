@@ -5,7 +5,7 @@ import type { Kondisi } from "@/lib/body/db.ts";
 import { Stepper } from "../_components/Stepper.tsx";
 import { simpanTimbangan } from "./actions.ts";
 
-const PILIHAN: { nilai: Kondisi; judul: string; ket: string }[] = [
+export const PILIHAN: { nilai: Kondisi; judul: string; ket: string }[] = [
   { nilai: "sebelum_latihan", judul: "Sebelum latihan (di gym)", ket: "Saran: timbang di gym hari latihan terakhir minggu ini, sebelum mulai. Kondisi yang sama tiap minggu." },
   { nilai: "pagi_puasa", judul: "Pagi, belum makan/minum", ket: "Habis bangun dan ke toilet." },
   { nilai: "setelah_olahraga", judul: "Setelah latihan", ket: "Berat bisa turun sementara karena keringat." },

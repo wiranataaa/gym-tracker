@@ -21,6 +21,7 @@ const dasar: Laporan = {
   stagnan: ["Barbell Row"],
   nutrisi: { hariTercatat: 5, rataKcal: 2540, rataProtein: 128, hariProteinTercapai: 2, targetKcal: 2700, targetProtein: 135 },
   kalori: { sebelum: 2700, kcalBaru: 2850, berubah: true, alasan: "Berat naik di bawah 0,2 kg/minggu selama 2 minggu berturut-turut. Target naik 150 kcal." },
+  deload: { perlu: true, alasan: ["Udah ±8 minggu latihan (20 sesi) sejak deload terakhir / mulai."], aktif: false, sampai: null },
 };
 
 test("laporan lengkap memuat semua bagian dengan angka dari data", () => {
@@ -38,6 +39,9 @@ test("laporan lengkap memuat semua bagian dengan angka dari data", () => {
     "5 hari tercatat · rata-rata 2.540 kcal",
     "protein tercapai 2 dari 5 hari",
     "2.700 → 2.850 kcal",
+    "Saran deload (minggu ringan)",
+    "Udah ±8 minggu latihan",
+    "/deload mulai",
   ]) {
     assert.ok(t.includes(s), `tidak ditemukan: ${s}\n\n${t}`);
   }
@@ -52,6 +56,7 @@ test("laporan minggu kosong tetap ramah dan nggak error", () => {
     stagnan: [],
     nutrisi: { hariTercatat: 0, rataKcal: null, rataProtein: null, hariProteinTercapai: 0, targetKcal: 2700, targetProtein: 135 },
     kalori: { sebelum: 2700, kcalBaru: 2700, berubah: false, alasan: "Data timbangan belum cukup." },
+    deload: { perlu: false, alasan: [], aktif: false, sampai: null },
   };
   const t = formatLaporan(kosong);
   assert.ok(t.includes("0 dari 3 sesi → konsistensi 0%"));

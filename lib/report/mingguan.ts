@@ -1,6 +1,8 @@
 import { dailyValues, outlook, weeklyRate, windowAverage } from "../body/trend.ts";
 import { listMeasurements, getTargets } from "../body/db.ts";
+import { PANDUAN_DELOAD } from "../program/deload.ts";
 import { estimate1RM } from "../program/pr.ts";
+import { cekDeload, type StatusDeload } from "./deloadCek.ts";
 import { recentDays } from "../nutrition/db.ts";
 import { db, must } from "../supabase.ts";
 import { fmtInt, fmtKg, tglLengkap, tglSingkat } from "../time.ts";
@@ -29,6 +31,7 @@ export type Laporan = {
   stagnan: string[];
   nutrisi: { hariTercatat: number; rataKcal: number | null; rataProtein: number | null; hariProteinTercapai: number; targetKcal: number; targetProtein: number };
   kalori: Penyesuaian & { sebelum: number };
+  deload: StatusDeload;
 };
 
 const koma = (n: number) => String(n).replace(".", ",");
@@ -130,6 +133,7 @@ export async function hitungLaporan(hariMinggu: string): Promise<Laporan> {
     stagnan: stag,
     nutrisi,
     kalori,
+    deload: await cekDeload(hariMinggu),
   };
 }
 
@@ -187,6 +191,12 @@ export function formatLaporan(l: Laporan): string {
   // Kalori minggu depan
   x.push("🔧 Target kalori minggu depan");
   x.push(l.kalori.berubah ? `• ${fmtInt(l.kalori.sebelum)} → ${fmtInt(l.kalori.kcalBaru)} kcal. ${l.kalori.alasan}` : `• Tetap ${fmtInt(l.kalori.kcalBaru)} kcal. ${l.kalori.alasan}`);
+
+  if (l.deload.aktif) {
+    x.push("", `🔋 Minggu deload lagi berjalan${l.deload.sampai ? ` sampai ${tglSingkat(l.deload.sampai)}` : ""}. Nikmatin pemulihannya.`);
+  } else if (l.deload.perlu) {
+    x.push("", "🔋 Saran deload (minggu ringan)", ...l.deload.alasan.map((a) => `• ${a}`), `${PANDUAN_DELOAD}`, "Mulai kapan pun lewat /deload mulai (atau di app → Pengaturan).");
+  }
   return x.join("\n");
 }
 

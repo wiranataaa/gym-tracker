@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { PANDUAN_DELOAD } from "@/lib/program/deload.ts";
 import { SARAN_LATIHAN_RAMADAN } from "@/lib/ramadan/ramadan.ts";
 import { fmtInt, fmtKg } from "@/lib/time.ts";
 import type { TodayView } from "@/lib/workout/today.ts";
@@ -65,6 +66,7 @@ export function PanelMulai({ view }: { view: Siap }) {
         <p className="mt-3 text-xs text-slate-400">
           🎯 Target hari ini: {fmtInt(view.targetKcal)} kcal{view.ramadan ? " (maintenance, mode Ramadan)" : ""} · protein {view.targetProteinG} g
         </p>
+        {view.deload && <p className="mt-2 rounded-xl bg-sky-400/10 p-3 text-xs text-sky-100">🔋 {PANDUAN_DELOAD}</p>}
         {view.ramadan && <p className="mt-2 rounded-xl bg-indigo-400/10 p-3 text-xs text-indigo-100">🌙 {SARAN_LATIHAN_RAMADAN}</p>}
       </div>
 

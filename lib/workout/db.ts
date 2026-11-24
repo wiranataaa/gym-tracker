@@ -38,6 +38,10 @@ export type Settings = {
   ramadan_override: OverrideRamadan;
   ramadan_start: string;
   lebaran_date: string;
+  /** minggu deload (ringan) sedang berjalan? */
+  deload_aktif: boolean;
+  deload_sampai: string | null;
+  deload_terakhir: string | null;
 };
 
 export type SessionRow = {
@@ -123,29 +127,55 @@ type SettingsRow = {
   ramadan_override: OverrideRamadan;
   ramadan_start: string;
   lebaran_date: string;
+  deload_sampai: string | null;
+  deload_terakhir: string | null;
 };
 
-export async function getSettings(today: string = todayWIB()): Promise<Settings> {
-  const kolomLengkap =
-    "target_kcal,kcal_maintenance,target_protein_g,workout_days,target_weight_kg,sessions_per_week,ramadan_override,ramadan_start,lebaran_date";
-  const kolomLama = "target_kcal,target_protein_g,workout_days,target_weight_kg,sessions_per_week,ramadan_start,lebaran_date";
+const KOLOM_DASAR = "target_kcal,target_protein_g,workout_days,target_weight_kg,sessions_per_week,ramadan_start,lebaran_date";
+const KOLOM_007 = `${KOLOM_DASAR},kcal_maintenance,ramadan_override`;
+const KOLOM_008 = `${KOLOM_007},deload_sampai,deload_terakhir`;
 
+/**
+ * Pengaturan efektif hari ini. Tahan terhadap migrasi yang belum dijalankan: kalau kolom baru
+ * (007/008) belum ada, dipakai nilai bawaan supaya app tetap jalan.
+ */
+export async function getSettings(today: string = todayWIB()): Promise<Settings> {
   let r: SettingsRow;
-  const baru = await db().from("settings").select(kolomLengkap).eq("id", 1).single();
-  if (baru.error) {
-    // Kolom migrasi 007 belum ada (SQL belum dijalankan): pakai nilai bawaan supaya app tetap jalan
-    const lama = must(await db().from("settings").select(kolomLama).eq("id", 1).single()) as Omit<SettingsRow, "kcal_maintenance" | "ramadan_override">;
-    r = { ...lama, kcal_maintenance: 2450, ramadan_override: "auto" };
+  const penuh = await db().from("settings").select(KOLOM_008).eq("id", 1).single();
+  if (!penuh.error) {
+    r = penuh.data as unknown as SettingsRow;
   } else {
-    r = baru.data as SettingsRow;
+    const tengah = await db().from("settings").select(KOLOM_007).eq("id", 1).single();
+    if (!tengah.error) {
+      r = { ...(tengah.data as unknown as Omit<SettingsRow, "deload_sampai" | "deload_terakhir">), deload_sampai: null, deload_terakhir: null };
+    } else {
+      const lama = must(await db().from("settings").select(KOLOM_DASAR).eq("id", 1).single()) as unknown as Omit<
+        SettingsRow,
+        "kcal_maintenance" | "ramadan_override" | "deload_sampai" | "deload_terakhir"
+      >;
+      r = { ...lama, kcal_maintenance: 2450, ramadan_override: "auto", deload_sampai: null, deload_terakhir: null };
+    }
   }
+
   const aktif = ramadanAktif(today, { override: r.ramadan_override, mulai: r.ramadan_start, lebaran: r.lebaran_date });
   return {
     ...r,
     target_kcal_normal: r.target_kcal,
     target_kcal: aktif ? r.kcal_maintenance : r.target_kcal,
     ramadan_aktif: aktif,
+    deload_aktif: !!r.deload_sampai && today <= r.deload_sampai,
   };
+}
+
+/** Mulai minggu deload: 7 hari mulai hari ini. Butuh migrasi 008. */
+export async function mulaiDeload(today: string): Promise<string> {
+  const sampai = new Date(Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, +today.slice(8, 10)) + 6 * 86_400_000).toISOString().slice(0, 10);
+  must(await db().from("settings").update({ deload_sampai: sampai, deload_terakhir: today, updated_at: new Date().toISOString() }).eq("id", 1));
+  return sampai;
+}
+
+export async function akhiriDeload(): Promise<void> {
+  must(await db().from("settings").update({ deload_sampai: null, updated_at: new Date().toISOString() }).eq("id", 1));
 }
 
 export async function setRamadanOverride(v: OverrideRamadan): Promise<void> {

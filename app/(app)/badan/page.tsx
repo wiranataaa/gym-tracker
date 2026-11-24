@@ -6,6 +6,7 @@ import { fmtKg, tglLengkap, tglSingkat, todayWIB } from "@/lib/time.ts";
 import { BarisTimbangan } from "./BarisTimbangan.tsx";
 import { FormTimbang } from "./FormTimbang.tsx";
 import { GrafikBerat } from "./GrafikBerat.tsx";
+import { KartuTanita } from "./KartuTanita.tsx";
 
 const SUMBER: Record<string, string> = { manual: "app", telegram: "Telegram", foto_tanita: "foto Tanita" };
 
@@ -28,6 +29,8 @@ export default async function BadanPage() {
       <h1 className="text-2xl font-semibold">Badan</h1>
 
       <FormTimbang awal={terakhir?.weightKg ?? 71} />
+
+      <KartuTanita />
 
       {terakhir && o && (
         <div className="grid grid-cols-3 gap-2 text-center">

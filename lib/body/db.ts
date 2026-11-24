@@ -2,6 +2,7 @@ import { db, must } from "../supabase.ts";
 import { awalMinggu } from "../report/hitung.ts";
 import { todayWIB } from "../time.ts";
 import { dailyValues, daysBetween, weeklyRate } from "./trend.ts";
+import { waktuUkur, type KomposisiBaca } from "./tanitaValid.ts";
 
 export type Kondisi = "pagi_puasa" | "sebelum_latihan" | "setelah_makan" | "setelah_olahraga" | "lainnya";
 
@@ -82,6 +83,67 @@ export async function insertMeasurement(weightKg: number, condition: Kondisi, so
       source,
     }),
   );
+}
+
+/** Tinggi badan (cm) dari pengaturan, dipakai buat memeriksa BMI hasil baca Tanita. */
+export async function tinggiCm(): Promise<number> {
+  const r = must(await db().from("settings").select("height_cm").eq("id", 1).single()) as { height_cm: number };
+  return Number(r.height_cm);
+}
+
+/**
+ * Simpan hasil komposisi badan lengkap. Mengembalikan duplikat=true (tanpa menyimpan)
+ * kalau sudah ada timbangan di waktu yang sama.
+ */
+export async function simpanKomposisi(
+  d: KomposisiBaca,
+  kondisi: Kondisi,
+  source: Measurement["source"] = "foto_tanita",
+): Promise<{ id: number | null; duplikat: boolean; measuredAt: string }> {
+  if (d.beratKg == null) throw new Error("Berat wajib ada");
+  const measuredAt = waktuUkur(d);
+  const awal = new Date(new Date(measuredAt).getTime() - 60_000).toISOString();
+  const akhir = new Date(new Date(measuredAt).getTime() + 60_000).toISOString();
+  const ada = must(await db().from("body_measurements").select("id").gte("measured_at", awal).lte("measured_at", akhir).limit(1)) as { id: number }[];
+  if (ada.length > 0) return { id: ada[0].id, duplikat: true, measuredAt };
+
+  const row = must(
+    await db()
+      .from("body_measurements")
+      .insert({
+        measured_at: measuredAt,
+        weight_kg: d.beratKg,
+        body_fat_pct: d.bodyFatPct,
+        muscle_mass_kg: d.muscleMassKg,
+        muscle_score: d.muscleScore,
+        bmi: d.bmi,
+        muscle_quality: d.muscleQuality,
+        visceral_fat: d.visceralFat,
+        bone_mass_kg: d.boneMassKg,
+        body_water_pct: d.bodyWaterPct,
+        bmr_kcal: d.bmrKcal,
+        metabolic_age: d.metabolicAge,
+        condition: kondisi,
+        source,
+      })
+      .select("id")
+      .single(),
+  ) as { id: number };
+  return { id: row.id, duplikat: false, measuredAt };
+}
+
+export async function buatDraftTanita(data: KomposisiBaca, kondisi: Kondisi): Promise<number> {
+  const r = must(await db().from("tanita_draft").insert({ data, kondisi }).select("id").single()) as { id: number };
+  return r.id;
+}
+
+export async function ambilDraftTanita(id: number): Promise<{ data: KomposisiBaca; kondisi: Kondisi } | null> {
+  const r = must(await db().from("tanita_draft").select("data,kondisi").eq("id", id).maybeSingle()) as { data: KomposisiBaca; kondisi: Kondisi } | null;
+  return r;
+}
+
+export async function hapusDraftTanita(id: number): Promise<void> {
+  must(await db().from("tanita_draft").delete().eq("id", id));
 }
 
 /** Laju berat (kg/minggu) dari rata-rata 7 hari terakhir vs 7 hari sebelumnya; null kalau data belum cukup. */

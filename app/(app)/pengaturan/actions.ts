@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireOwner } from "@/lib/auth.ts";
 import { simpanPengaturanDb, type Pengaturan } from "@/lib/pengaturan/db.ts";
+import { todayWIB } from "@/lib/time.ts";
+import { akhiriDeload, mulaiDeload } from "@/lib/workout/db.ts";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -11,6 +13,28 @@ const dalam = (n: number, min: number, max: number) => Number.isFinite(n) && n >
 
 function selisihHari(a: string, b: string): number {
   return Math.round((Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10)) - Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10))) / 86_400_000);
+}
+
+export async function mulaiDeloadApp(): Promise<Result> {
+  await requireOwner();
+  try {
+    await mulaiDeload(todayWIB());
+  } catch {
+    return { ok: false, error: "Gagal. Kemungkinan migrasi database 008 belum dijalankan." };
+  }
+  for (const path of ["/", "/pengaturan"]) revalidatePath(path);
+  return { ok: true };
+}
+
+export async function akhiriDeloadApp(): Promise<Result> {
+  await requireOwner();
+  try {
+    await akhiriDeload();
+  } catch {
+    return { ok: false, error: "Gagal. Kemungkinan migrasi database 008 belum dijalankan." };
+  }
+  for (const path of ["/", "/pengaturan"]) revalidatePath(path);
+  return { ok: true };
 }
 
 export async function simpanPengaturan(p: Pengaturan): Promise<Result> {

@@ -1,4 +1,5 @@
 import { lajuBeratTerakhir } from "../body/db.ts";
+import { PANDUAN_DELOAD, setDeload } from "../program/deload.ts";
 import { rekomendasiKardio, type Kardio } from "../program/kardio.ts";
 import { kurangiVolumeRamadan, SARAN_LATIHAN_RAMADAN } from "../ramadan/ramadan.ts";
 import { computeTarget } from "../program/progression.ts";
@@ -27,6 +28,8 @@ export type TodayMenu = {
   recovery: boolean;
   /** mode Ramadan aktif: volume dikurangi, target kalori maintenance */
   ramadan: boolean;
+  /** minggu deload sedang berjalan: volume ±60% */
+  deload: boolean;
   /** semua hari program, buat fitur "Ganti menu" */
   pilihan: ProgramDay[];
 };
@@ -83,10 +86,11 @@ export async function buildMenu(today: string, mode: "normal" | "singkat", force
     recovery,
     pilihan: days,
     ramadan: settings.ramadan_aktif,
+    deload: settings.deload_aktif,
     kardio: rekomendasiKardio({ mode, recovery, lajuBeratKg: laju, ramadan: settings.ramadan_aktif }),
     items: dayItems.map((i) => {
-      // Saat Ramadan volume dikurangi sedikit (1 set di gerakan non-inti yang >= 3 set)
-      const sets = settings.ramadan_aktif ? kurangiVolumeRamadan(i.sets, i.isCore) : i.sets;
+      // Deload: volume ±60%. Ramadan: kurangi 1 set di gerakan non-inti yang >= 3 set. Keduanya tidak ditumpuk.
+      const sets = settings.deload_aktif ? setDeload(i.sets) : settings.ramadan_aktif ? kurangiVolumeRamadan(i.sets, i.isCore) : i.sets;
       return {
         exercise: i.exercise,
         position: i.position,
@@ -130,6 +134,7 @@ export function formatMenu(menu: TodayMenu, today: string, settings: Settings): 
   lines.push(`🚶 Kardio: ${menu.kardio.deskripsi}${menu.kardio.alasan ? ` (${menu.kardio.alasan})` : ""}`);
   lines.push("");
   lines.push(`🎯 Hari ini: ${fmtInt(settings.target_kcal)} kcal${menu.ramadan ? " (maintenance, mode Ramadan)" : ""} · protein ${settings.target_protein_g} g`);
+  if (menu.deload) lines.push(`🔋 ${PANDUAN_DELOAD}`);
   if (menu.ramadan) lines.push(`🌙 ${SARAN_LATIHAN_RAMADAN}`);
   lines.push("");
   lines.push("Log set tinggal ketik, contoh: bench 60x10x3. Mau menu lain? Ketik /menu.");

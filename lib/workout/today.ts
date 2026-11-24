@@ -70,6 +70,7 @@ export type TodayView =
       targetKcal: number;
       targetProteinG: number;
       ramadan: boolean;
+      deload: boolean;
     }
   | {
       kind: "berjalan";
@@ -213,5 +214,6 @@ export async function loadTodayView(today: string, force: boolean): Promise<Toda
     targetKcal: settings.target_kcal,
     targetProteinG: settings.target_protein_g,
     ramadan: menu.ramadan,
+    deload: menu.deload,
   };
 }

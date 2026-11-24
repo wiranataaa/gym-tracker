@@ -55,14 +55,14 @@ test("set kurang dari rencana (misal mode singkat): belum naik beban", () => {
   assert.equal(t.reason, "tahan_beban");
 });
 
-test("gagal batas bawah 2 sesi berturut-turut: turun ~7,5%", () => {
+test("gagal batas bawah 2 sesi berturut-turut: turun ~7,5% (dibulatkan ke kelipatan 2)", () => {
   const t = computeTarget(
     [session("2026-11-23", 60, [5, 5, 4]), session("2026-11-20", 60, [5, 4, 4])],
     scheme,
-    2.5,
+    2,
     "2026-11-26",
   );
-  assert.equal(t.weightKg, 55);
+  assert.equal(t.weightKg, 56);
   assert.equal(t.reps, 6);
   assert.equal(t.reason, "turun_beban");
 });
@@ -79,16 +79,31 @@ test("gagal cuma 1 sesi: belum turun beban", () => {
   assert.equal(t.reason, "tambah_rep");
 });
 
-test("libur 7-13 hari: ±90% beban terakhir", () => {
-  const t = computeTarget([session("2026-11-10", 60, [10, 10, 10])], scheme, 2.5, "2026-11-20");
-  assert.equal(t.weightKg, 55);
+test("libur 7-13 hari: ±90% beban terakhir (kelipatan 2 kg)", () => {
+  const t = computeTarget([session("2026-11-10", 60, [10, 10, 10])], scheme, 2, "2026-11-20");
+  assert.equal(t.weightKg, 54);
   assert.equal(t.reason, "balik_libur_sebentar");
 });
 
-test("libur >= 14 hari: ±80% beban terakhir", () => {
-  const t = computeTarget([session("2026-11-01", 60, [10, 10, 10])], scheme, 2.5, "2026-11-20");
-  assert.equal(t.weightKg, 47.5);
+test("libur >= 14 hari: ±80% beban terakhir (kelipatan 2 kg)", () => {
+  const t = computeTarget([session("2026-11-01", 60, [10, 10, 10])], scheme, 2, "2026-11-20");
+  assert.equal(t.weightKg, 48);
   assert.equal(t.reason, "balik_libur_lama");
+});
+
+test("semua target beban kelipatan 2 kg kalau beban awal kelipatan 2 (naik, libur, turun)", () => {
+  const naik = computeTarget([session("2026-11-23", 60, [10, 10, 10])], scheme, 2, "2026-11-26");
+  const lower = computeTarget([session("2026-11-23", 100, [8, 8, 8])], { sets: 3, repMin: 6, repMax: 8 }, 4, "2026-11-26");
+  const libur = computeTarget([session("2026-11-10", 78, [10, 10, 10])], scheme, 2, "2026-11-20");
+  const turun = computeTarget(
+    [session("2026-11-23", 70, [5, 5, 4]), session("2026-11-20", 70, [5, 4, 4])],
+    scheme,
+    2,
+    "2026-11-26",
+  );
+  for (const t of [naik, lower, libur, turun]) assert.equal((t.weightKg as number) % 2, 0, `bukan kelipatan 2: ${t.weightKg}`);
+  assert.equal(naik.weightKg, 62);
+  assert.equal(lower.weightKg, 104);
 });
 
 test("tepat 7 hari dihitung libur, 6 hari belum", () => {

@@ -1,6 +1,7 @@
 // Kirim pesan ke Telegram. TELEGRAM_DRY_RUN=1 -> cuma dicetak ke konsol (buat tes lokal).
 
-export type Button = { text: string; data: string };
+/** Tombol callback (data) atau tombol tautan (url). */
+export type Button = { text: string; data?: string; url?: string };
 export type Keyboard = Button[][];
 
 async function api(method: string, payload: object): Promise<{ ok: boolean; result?: { message_id?: number } }> {
@@ -27,7 +28,7 @@ async function api(method: string, payload: object): Promise<{ ok: boolean; resu
 function markup(keyboard?: Keyboard) {
   if (!keyboard || keyboard.length === 0) return undefined;
   return {
-    inline_keyboard: keyboard.map((row) => row.map((b) => ({ text: b.text, callback_data: b.data }))),
+    inline_keyboard: keyboard.map((row) => row.map((b) => (b.url ? { text: b.text, url: b.url } : { text: b.text, callback_data: b.data }))),
   };
 }
 

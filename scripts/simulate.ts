@@ -3,6 +3,8 @@
 // Jalankan: node --env-file=.env.local scripts/simulate.ts
 
 import { readFileSync } from "node:fs";
+import { pesanPagi } from "../lib/bot/pagi.ts";
+import type { Keyboard } from "../lib/telegram.ts";
 import { handleBotInput } from "../lib/bot/handlers.ts";
 import { db } from "../lib/supabase.ts";
 import { getTargets, insertMeasurement, listMeasurements, removeMeasurement } from "../lib/body/db.ts";
@@ -20,8 +22,8 @@ async function say(date: string, input: string | { callback: string } | { photo:
   const out: string[] = [];
   const ctx = {
     today: date,
-    send: async (text: string, kb?: { text: string; data: string }[][]) => {
-      out.push(text + (kb ? `\n   [tombol: ${kb.flat().map((b) => `${b.text}=${b.data}`).join(" | ")}]` : ""));
+    send: async (text: string, kb?: Keyboard) => {
+      out.push(text + (kb ? `\n   [tombol: ${kb.flat().map((b) => `${b.text}=${b.url ?? b.data}`).join(" | ")}]` : ""));
     },
     downloadPhoto: async () => {
       const file = process.env.SIM_IMAGE;
@@ -114,7 +116,7 @@ async function main() {
   // --- Senin 7 Des: A lagi, target dari riwayat (bench 60x10x3 = batas atas -> naik) ---
   r = await say("2026-12-07", "/hari_ini");
   expect("Senin kembali ke Full Body A", r.includes("Full Body A"));
-  expect("bench naik ke 62,5 kg", r.includes("62,5 kg × 6"));
+  expect("bench naik ke 62 kg (kelipatan 2)", r.includes("62 kg × 6"));
   r = await say("2026-12-07", "bench 65x8");
   expect("PR terdeteksi", r.includes("PR"));
   expect("dibandingkan sesi lalu", r.includes("Sesi lalu: 60 kg × 10"));
@@ -181,6 +183,22 @@ async function main() {
   expect("outlook terhitung dari data asli", !!o && o.currentAvg > 60 && o.daysLeft > 0);
   await removeMeasurement(baru.id);
   expect("timbangan uji terhapus", !(await listMeasurements()).some((m) => m.id === baru.id));
+
+  // --- Pesan pagi otomatis (cron), Selasa 8 Des: rekap kemarin (Senin 7 Des) + menu hari ini ---
+  console.log("\n▶ Pesan pagi");
+  const pagi: string[] = [];
+  await pesanPagi({
+    today: "2026-12-08",
+    send: async (text, kb) => {
+      pagi.push(text + (kb ? `\n   [tombol: ${kb.flat().map((b) => `${b.text}=${b.url ?? b.data}`).join(" | ")}]` : ""));
+    },
+  });
+  console.log(pagi.join("\n---\n"));
+  expect("pagi: ada sapaan dan tanggal", pagi[0].includes("Selamat pagi") && pagi[0].includes("Selasa"));
+  expect("pagi: rekap latihan kemarin (Full Body A)", pagi[0].includes("Kemarin: Full Body A"));
+  expect("pagi: rekap makan kemarin kosong -> ajakan kirim foto", pagi[0].includes("Belum ada catatan makan"));
+  expect("pagi: ada tombol buka app", pagi[0].includes("Buka app") && pagi[0].includes("https://"));
+  expect("pagi: pesan kedua = menu hari ini dengan target", pagi.length === 2 && pagi[1].includes("Full Body") && pagi[1].includes("target"));
 
   // --- Nutrisi (memanggil Claude beneran, biayanya sekitar sen) ---
   console.log("\n▶ Nutrisi");

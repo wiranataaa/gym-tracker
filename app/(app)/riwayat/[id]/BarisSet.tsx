@@ -47,7 +47,7 @@ export function BarisSet({ nomor, set }: Props) {
 
   return (
     <div className="space-y-3 rounded-xl border border-emerald-400/30 bg-black/20 p-3">
-      <Stepper label="Beban" unit="kg" value={weight} step={2.5} onChange={setWeight} />
+      <Stepper label="Beban" unit="kg" value={weight} step={2} onChange={setWeight} />
       <Stepper label="Reps" value={reps} step={1} min={1} max={100} onChange={(r) => setReps(Math.round(r))} />
       <div className="flex items-center gap-2">
         <span className="text-xs text-slate-400">RPE</span>

@@ -22,9 +22,12 @@ function kg(n: number): string {
   return String(clean(n)).replace(".", ",");
 }
 
-/** Langkah pembulatan: pelat barbell terkecil 2,5 kg, dumbbell ikut langkahnya. */
+/** Beban di gym Nata (Fithub Tebet) selalu kelipatan 2 kg. */
+export const WEIGHT_GRID_KG = 2;
+
+/** Langkah pembulatan dan tombol +/-: sekecil kenaikan gerakan itu, tapi nggak lebih besar dari 2 kg. */
 export function roundingStep(incrementKg: number): number {
-  return incrementKg > 2.5 ? 2.5 : incrementKg;
+  return Math.min(incrementKg, WEIGHT_GRID_KG);
 }
 
 export function roundToStep(value: number, step: number): number {

@@ -32,12 +32,15 @@ export function isOwnerEmail(email?: string | null): boolean {
   return !!email && owners.includes(email.trim().toLowerCase());
 }
 
-/** Wajib dipanggil di setiap halaman dan Server Action yang menyentuh data. */
+/**
+ * Wajib dipanggil di setiap halaman dan Server Action yang menyentuh data.
+ * Pakai getClaims(): tanda tangan JWT diperiksa lokal (kunci publiknya di-cache), jadi
+ * nggak ada panggilan jaringan ke Supabase Auth di setiap klik. Proxy tetap menyegarkan sesi.
+ */
 export async function requireOwner() {
   const supabase = await supabaseAuth();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user || !isOwnerEmail(user.email)) redirect("/login");
-  return user;
+  const { data } = await supabase.auth.getClaims();
+  const email = (data?.claims as { email?: string } | undefined)?.email;
+  if (!data?.claims || !isOwnerEmail(email)) redirect("/login");
+  return { email: email as string };
 }

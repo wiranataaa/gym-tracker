@@ -17,9 +17,9 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims() memeriksa JWT secara lokal dan hanya menghubungi Supabase kalau token perlu disegarkan
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims ?? null;
 
   const path = request.nextUrl.pathname;
   const publik = path.startsWith("/login") || path.startsWith("/auth");

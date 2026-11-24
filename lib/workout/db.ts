@@ -26,6 +26,8 @@ export type Settings = {
   target_protein_g: number;
   workout_days: number[];
   target_weight_kg: number;
+  sessions_per_week: number;
+  ramadan_mode: boolean;
 };
 
 export type SessionRow = {
@@ -96,7 +98,11 @@ export async function loadProgram(): Promise<{ days: ProgramDay[]; items: DayExe
 
 export async function getSettings(): Promise<Settings> {
   return must(
-    await db().from("settings").select("target_kcal,target_protein_g,workout_days,target_weight_kg").eq("id", 1).single(),
+    await db()
+      .from("settings")
+      .select("target_kcal,target_protein_g,workout_days,target_weight_kg,sessions_per_week,ramadan_mode")
+      .eq("id", 1)
+      .single(),
   );
 }
 

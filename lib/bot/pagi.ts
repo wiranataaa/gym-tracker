@@ -1,8 +1,11 @@
+import { listMeasurements } from "../body/db.ts";
+import { daysBetween } from "../body/trend.ts";
 import { addDays, fmtInt, fmtKg, isoWeekday, namaHari, tglLengkap, todayWIB } from "../time.ts";
 import { dayTotals } from "../nutrition/db.ts";
 import { getSettings } from "../workout/db.ts";
 import { listSessions } from "../workout/history.ts";
 import { handleBotInput, type Ctx } from "./handlers.ts";
+import { pengingatTimbang } from "./pengingat.ts";
 
 export const APP_URL = process.env.APP_URL ?? "https://gym-tracker-nu-two-90.vercel.app";
 
@@ -15,7 +18,7 @@ export async function pesanPagi(ctx: Ctx): Promise<void> {
   const today = ctx.today ?? todayWIB();
   const kemarin = addDays(today, -1);
 
-  const [sesi, nut, settings] = await Promise.all([listSessions(40), dayTotals(kemarin), getSettings()]);
+  const [sesi, nut, settings, ukur] = await Promise.all([listSessions(40), dayTotals(kemarin), getSettings(), listMeasurements(1)]);
   const sKemarin = sesi.filter((s) => s.date === kemarin && s.status === "selesai" && s.totalSets > 0);
 
   const lines: string[] = [`☀️ Selamat pagi, Nata! ${namaHari(today)}, ${tglLengkap(today)}`, ""];
@@ -40,7 +43,18 @@ export async function pesanPagi(ctx: Ctx): Promise<void> {
     lines.push("🍽️ Belum ada catatan makan kemarin. Kirim foto makanan ke sini biar kalori dan protein kehitung.");
   }
 
-  await ctx.send(lines.join("\n"), [[{ text: "📱 Buka app", url: APP_URL }]]);
+  // Pengingat timbang: tiap Minggu pagi, dan kalau sudah lama nggak timbang (>= 8 hari)
+  const hariSejakTimbang = ukur[0] ? daysBetween(ukur[0].date, today) : null;
+  const timbang = pengingatTimbang(today, hariSejakTimbang);
+  const perluTimbang = timbang.perlu;
+  lines.push(...timbang.baris);
+
+  await ctx.send(lines.join("\n"), [
+    [
+      { text: "📱 Buka app", url: APP_URL },
+      ...(perluTimbang ? [{ text: "⚖️ Catat timbangan", url: `${APP_URL}/badan` }] : []),
+    ],
+  ]);
 
   // Menu hari ini (atau pesan istirahat kalau weekend), lengkap dengan target beban dan tombolnya
   await handleBotInput({ text: "/hari_ini" }, ctx);

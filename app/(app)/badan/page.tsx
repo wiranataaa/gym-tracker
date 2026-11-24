@@ -1,6 +1,7 @@
 import { requireOwner } from "@/lib/auth.ts";
 import { getTargets, listMeasurements } from "@/lib/body/db.ts";
 import { dailyValues, movingAverage7, outlook, weeklyRate } from "@/lib/body/trend.ts";
+import { laporanTerakhir } from "@/lib/report/mingguan.ts";
 import { fmtKg, tglLengkap, tglSingkat, todayWIB } from "@/lib/time.ts";
 import { BarisTimbangan } from "./BarisTimbangan.tsx";
 import { FormTimbang } from "./FormTimbang.tsx";
@@ -11,7 +12,7 @@ const SUMBER: Record<string, string> = { manual: "app", telegram: "Telegram", fo
 export default async function BadanPage() {
   await requireOwner();
   const today = todayWIB();
-  const [list, t] = await Promise.all([listMeasurements(), getTargets()]);
+  const [list, t, laporan] = await Promise.all([listMeasurements(), getTargets(), laporanTerakhir()]);
 
   const harian = dailyValues(list.map((m) => ({ date: m.date, weightKg: m.weightKg })));
   const rata7 = movingAverage7(harian);
@@ -78,6 +79,13 @@ export default async function BadanPage() {
           </div>
           <p className="mt-3 text-xs text-slate-500">Hasil timbangan BIA dipengaruhi hidrasi. Bandingin cuma yang kondisinya sama (pagi, belum makan/minum).</p>
         </div>
+      )}
+
+      {laporan && (
+        <details className="rounded-2xl border border-white/5 bg-white/[0.04] p-4">
+          <summary className="cursor-pointer text-sm font-medium text-slate-300">📊 Laporan mingguan terakhir ({tglSingkat(laporan.week_end)})</summary>
+          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed">{laporan.report_text}</p>
+        </details>
       )}
 
       <div>

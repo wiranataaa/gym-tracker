@@ -20,10 +20,16 @@ export async function supabaseAuth() {
   });
 }
 
-/** Gagal tertutup: kalau OWNER_EMAIL belum diisi, semua orang ditolak. */
+/**
+ * Gagal tertutup: kalau OWNER_EMAIL belum diisi, semua orang ditolak.
+ * Boleh lebih dari satu email, dipisah koma (misal dua akun Google milik pemilik).
+ */
 export function isOwnerEmail(email?: string | null): boolean {
-  const owner = process.env.OWNER_EMAIL?.trim().toLowerCase();
-  return !!owner && !!email && email.trim().toLowerCase() === owner;
+  const owners = (process.env.OWNER_EMAIL ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return !!email && owners.includes(email.trim().toLowerCase());
 }
 
 /** Wajib dipanggil di setiap halaman dan Server Action yang menyentuh data. */

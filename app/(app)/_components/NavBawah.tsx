@@ -15,7 +15,7 @@ export function NavBawah() {
   const aktif = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#0b0f14]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+    <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#0b0f14]/95 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur">
       <div className="mx-auto grid max-w-md grid-cols-4">
         {TAB.map((t) => (
           <Link

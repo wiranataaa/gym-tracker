@@ -23,6 +23,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  // Wajib supaya env(safe-area-inset-*) terbaca di iPhone berponi (XR, X, 11, dst.)
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -10,7 +10,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { error } = await searchParams;
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center px-6">
+    <main className="flex min-h-dvh flex-col items-center justify-center px-6 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
       <div className="w-full max-w-sm text-center">
         <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/15 text-3xl">🏋️</div>
         <h1 className="text-2xl font-semibold">Gym Tracker</h1>

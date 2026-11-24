@@ -222,6 +222,23 @@ export async function finishSession(sessionId: number, energy: number | null): P
   );
 }
 
+export async function getFinishedSession(today: string): Promise<SessionRow | null> {
+  return must(
+    await db()
+      .from("workout_sessions")
+      .select("id,session_date,program_day_id,mode,status,energy,started_at")
+      .eq("status", "selesai")
+      .eq("session_date", today)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  );
+}
+
+export async function deleteSet(setId: number): Promise<void> {
+  must(await db().from("workout_sets").delete().eq("id", setId));
+}
+
 // ---------- Riwayat per gerakan ----------
 
 /** Riwayat working set per gerakan dari sesi SEBELUM tanggal `before` (sesi terbaru dulu). */

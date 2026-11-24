@@ -1,4 +1,5 @@
 import { keluar } from "./actions.ts";
+import { NavBawah } from "./_components/NavBawah.tsx";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,7 +13,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <button className="rounded-lg px-3 py-1.5 text-sm text-slate-400 active:bg-white/10">Keluar</button>
         </form>
       </header>
-      <main className="flex-1 px-4 pb-24 pt-4">{children}</main>
+      <main className="flex-1 px-4 pb-28 pt-4">{children}</main>
+      <NavBawah />
     </div>
   );
 }

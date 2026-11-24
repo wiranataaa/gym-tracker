@@ -4,6 +4,7 @@
 
 import { handleBotInput } from "../lib/bot/handlers.ts";
 import { db } from "../lib/supabase.ts";
+import { exercisesWithData, getProgress, getSessionDetail, listSessions, updateSet } from "../lib/workout/history.ts";
 
 const started = new Date().toISOString();
 const dates: string[] = [];
@@ -115,6 +116,33 @@ async function main() {
   expect("balik libur: ada catatan libur", r.includes("nggak latihan"));
 
   expect("perintah tak dikenal", (await say("2026-12-22", "/ngawur")).includes("belum ada"));
+
+  // --- Halaman Riwayat dan Progres (query yang dipakai app) ---
+  console.log("\n▶ Query Riwayat & Progres");
+  const sesi = await listSessions();
+  const uji = sesi.filter((s) => dates.includes(s.date));
+  expect("riwayat: sesi uji muncul (>=4)", uji.length >= 4);
+  expect("riwayat: ada volume & set", uji.every((s) => s.totalSets > 0 && s.volumeKg > 0));
+
+  const detail = await getSessionDetail(uji[uji.length - 1].id);
+  expect("detail sesi: ada gerakan & set", !!detail && detail.exercises.length > 0 && detail.exercises[0].sets.length > 0);
+
+  const daftar = await exercisesWithData();
+  const bench = daftar.find((e) => e.name === "Bench Press");
+  expect("progres: Bench Press ada di daftar gerakan", !!bench);
+  if (bench) {
+    const p = await getProgress(bench.id);
+    expect("progres: 2 titik (1 Des & 7 Des)", p.points.filter((x) => dates.includes(x.date)).length === 2);
+    expect("progres: 1RM terbaik 82,3 (65x8)", p.bestE1rm?.value === 82.3);
+    expect("progres: beban terberat 65 kg", p.heaviest?.weightKg === 65);
+
+    const set = (await getSessionDetail(uji.find((s) => s.date === "2026-12-07")!.id))!.exercises
+      .find((e) => e.name === "Bench Press")!.sets[0];
+    await updateSet(set.id, 66, 8, 9);
+    const after = (await getSessionDetail(uji.find((s) => s.date === "2026-12-07")!.id))!.exercises
+      .find((e) => e.name === "Bench Press")!.sets[0];
+    expect("edit set tersimpan (66 kg, RPE 9)", after.weightKg === 66 && after.rpe === 9);
+  }
 }
 
 main()

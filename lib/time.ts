@@ -18,6 +18,18 @@ export function namaHari(date: string): string {
   return HARI[isoWeekday(date)];
 }
 
+const BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+
+/** "2026-12-01" -> "Sel, 1 Des" */
+export function tglPendek(date: string): string {
+  return `${namaHari(date).slice(0, 3)}, ${parseInt(date.slice(8, 10), 10)} ${BULAN[parseInt(date.slice(5, 7), 10) - 1]}`;
+}
+
+/** "2026-12-01" -> "1 Des" */
+export function tglSingkat(date: string): string {
+  return `${parseInt(date.slice(8, 10), 10)} ${BULAN[parseInt(date.slice(5, 7), 10) - 1]}`;
+}
+
 /** Geser tanggal "YYYY-MM-DD" sebanyak n hari. */
 export function addDays(date: string, n: number): string {
   const t = Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10)) + n * 86_400_000;

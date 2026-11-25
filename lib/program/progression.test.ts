@@ -91,7 +91,7 @@ test("libur >= 14 hari: ±80% beban terakhir (kelipatan 2 kg)", () => {
   assert.equal(t.reason, "balik_libur_lama");
 });
 
-test("semua target beban kelipatan 2 kg kalau beban awal kelipatan 2 (naik, libur, turun)", () => {
+test("semua target beban bilangan bulat kg (naik, libur, turun), sesuai tombol 1 kg", () => {
   const naik = computeTarget([session("2026-11-23", 60, [10, 10, 10])], scheme, 2, "2026-11-26");
   const lower = computeTarget([session("2026-11-23", 100, [8, 8, 8])], { sets: 3, repMin: 6, repMax: 8 }, 4, "2026-11-26");
   const libur = computeTarget([session("2026-11-10", 78, [10, 10, 10])], scheme, 2, "2026-11-20");
@@ -101,7 +101,7 @@ test("semua target beban kelipatan 2 kg kalau beban awal kelipatan 2 (naik, libu
     2,
     "2026-11-26",
   );
-  for (const t of [naik, lower, libur, turun]) assert.equal((t.weightKg as number) % 2, 0, `bukan kelipatan 2: ${t.weightKg}`);
+  for (const t of [naik, lower, libur, turun]) assert.ok(Number.isInteger(t.weightKg), `bukan bilangan bulat: ${t.weightKg}`);
   assert.equal(naik.weightKg, 62);
   assert.equal(lower.weightKg, 104);
 });

@@ -56,9 +56,16 @@ export default async function ProgresPage({ searchParams }: { searchParams: Prom
             <GrafikGaris warna="#38bdf8" titik={progress.points.map((p) => ({ label: tglSingkat(p.date), value: p.e1rm }))} />
           </Kartu>
 
-          <p className="px-1 text-xs text-slate-500">
-            Estimasi 1RM dihitung pakai rumus Epley dari set terbaik tiap sesi. Ini perkiraan, bukan angka tes 1RM beneran. {progress.points.length} sesi tercatat.
-          </p>
+          <details className="rounded-2xl border border-white/5 bg-white/[0.04] p-4 text-sm">
+            <summary className="cursor-pointer font-medium text-slate-300">Apa itu estimasi 1RM?</summary>
+            <p className="mt-2 leading-relaxed text-slate-300">
+              1RM = beban maksimal yang bisa lo angkat <b>1 kali</b>. Di sini bukan hasil tes beneran, tapi perkiraan dari set terbaik tiap sesi pakai rumus Epley: <b>beban × (1 + reps ÷ 30)</b>. Contoh: 18 kg × 12 = 18 × (1 + 12/30) = 25,2 kg.
+            </p>
+            <p className="mt-2 leading-relaxed text-slate-400">
+              Gunanya biar kekuatan antar sesi bisa dibandingin walau jumlah repsnya beda (misalnya 60 kg × 8 vs 55 kg × 12), dan buat deteksi PR. Garisnya naik = lo makin kuat. Makin tinggi repsnya, makin kasar perkiraannya.
+            </p>
+          </details>
+          <p className="px-1 text-xs text-slate-500">{progress.points.length} sesi tercatat.</p>
         </>
       )}
     </div>

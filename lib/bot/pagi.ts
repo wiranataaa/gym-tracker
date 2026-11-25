@@ -1,4 +1,5 @@
 import { statusTimbang } from "../body/db.ts";
+import { kutipanHariIni } from "../kutipan.ts";
 import { addDays, fmtInt, fmtKg, isoWeekday, namaHari, tglLengkap, todayWIB } from "../time.ts";
 import { dayTotals } from "../nutrition/db.ts";
 import { awalMinggu } from "../report/hitung.ts";
@@ -31,7 +32,7 @@ export async function pesanPagi(ctx: Ctx): Promise<void> {
   ]);
   const sKemarin = sesi.filter((s) => s.date === kemarin && s.status === "selesai" && s.totalSets > 0);
 
-  const lines: string[] = [`☀️ Selamat pagi, Nata! ${namaHari(today)}, ${tglLengkap(today)}`, ""];
+  const lines: string[] = [`☀️ Selamat pagi, Nata! ${namaHari(today)}, ${tglLengkap(today)}`, "", `🔥 ${kutipanHariIni(today)}`, ""];
 
   if (sKemarin.length > 0) {
     const sets = sKemarin.reduce((a, s) => a + s.totalSets, 0);

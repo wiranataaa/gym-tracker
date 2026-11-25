@@ -22,10 +22,13 @@ function kg(n: number): string {
   return String(clean(n)).replace(".", ",");
 }
 
-/** Beban di gym Nata (Fithub Tebet) selalu kelipatan 2 kg. */
-export const WEIGHT_GRID_KG = 2;
+/**
+ * Langkah beban terkecil di tombol +/- dan pembulatan: 1 kg. Barbel dan dumbbell di Fithub Tebet
+ * kelipatan 2 kg, tapi cable machine naik per 1 kg, jadi tombolnya dibuat 1 kg buat semua gerakan.
+ */
+export const WEIGHT_GRID_KG = 1;
 
-/** Langkah pembulatan dan tombol +/-: sekecil kenaikan gerakan itu, tapi nggak lebih besar dari 2 kg. */
+/** Langkah pembulatan dan tombol +/-: sekecil kenaikan gerakan itu, tapi nggak lebih besar dari WEIGHT_GRID_KG. */
 export function roundingStep(incrementKg: number): number {
   return Math.min(incrementKg, WEIGHT_GRID_KG);
 }

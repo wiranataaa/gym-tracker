@@ -185,6 +185,12 @@ export function Pencatat({ view }: { view: Berjalan }) {
                       {v}
                     </button>
                   ))}
+                  <details className="basis-full text-xs text-slate-400">
+                    <summary className="cursor-pointer text-slate-300">Apa itu RPE? (boleh dikosongin)</summary>
+                    <p className="mt-1.5 leading-relaxed">
+                      RPE = seberapa berat set itu terasa, skala 1-10. <b>10</b> = mentok, nggak sanggup 1 rep lagi. <b>9</b> = sisa 1 rep. <b>8</b> = sisa 2 rep. <b>7</b> = sisa 3 rep. <b>6</b> = ringan banget. Beban baru dinaikin otomatis kalau semua set di batas atas reps dan RPE-nya 8 atau lebih ringan.
+                    </p>
+                  </details>
                   <label className="ml-auto flex items-center gap-2 text-sm text-slate-300">
                     <input
                       type="checkbox"

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireOwner } from "@/lib/auth.ts";
+import { kutipanHariIni, kutipanSelesai } from "@/lib/kutipan.ts";
 import { namaHari, todayWIB, fmtInt, fmtKg } from "@/lib/time.ts";
 import { loadTodayView } from "@/lib/workout/today.ts";
 import { BannerTimbang } from "./_components/BannerTimbang.tsx";
@@ -25,6 +26,19 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
         </p>
         <h1 className="text-2xl font-semibold">Hari ini</h1>
       </div>
+
+      {/* Pecut harian (beda tiap hari). Setelah latihan selesai ganti jadi pengakuan singkat. */}
+      {view.kind === "selesai" ? (
+        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4">
+          <p className="text-xs uppercase tracking-wide text-emerald-300/80">✅ Hari ini</p>
+          <p className="mt-1.5 text-base font-semibold leading-snug">{kutipanSelesai(today)}</p>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-orange-400/25 bg-gradient-to-br from-orange-500/15 to-red-500/10 p-4">
+          <p className="text-xs uppercase tracking-wide text-orange-300/80">🔥 Pecut hari ini</p>
+          <p className="mt-1.5 text-base font-semibold leading-snug">{kutipanHariIni(today)}</p>
+        </div>
+      )}
 
       {view.kind === "tanpa_program" && (
         <Kartu>Program latihan belum ada di database.</Kartu>

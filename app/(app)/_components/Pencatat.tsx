@@ -4,8 +4,11 @@ import { useMemo, useState, useTransition } from "react";
 import { fmtKg } from "@/lib/time.ts";
 import type { ExerciseView, LoggedSet, TodayView } from "@/lib/workout/today.ts";
 import { hapusSet, selesaiLatihan, simpanSet } from "../actions.ts";
+import { istirahatDetik } from "@/lib/workout/istirahat.ts";
 import { KartuKardio } from "./KartuKardio.tsx";
 import { Stepper } from "./Stepper.tsx";
+import { SakelarTimer } from "./TimerIstirahat.tsx";
+import { bacaSakelarMentah, bukaAudio, hentikanTimer, mulaiTimer, timerNyala } from "./timerStore.ts";
 
 type Berjalan = Extract<TodayView, { kind: "berjalan" }>;
 type Draft = { weight: number; reps: number };
@@ -68,9 +71,16 @@ export function Pencatat({ view }: { view: Berjalan }) {
   function simpan(e: ExerciseView) {
     const d = draftFor(e);
     const isWarmup = !!warmup[e.exerciseId];
+    const rpeSet = rpe[e.exerciseId] ?? null;
+    bukaAudio(); // harus di dalam tap supaya bunyi timer bisa keluar nanti
     jalan(
-      () => simpanSet({ exerciseId: e.exerciseId, weightKg: d.weight, reps: d.reps, rpe: rpe[e.exerciseId] ?? null, isWarmup }),
+      () => simpanSet({ exerciseId: e.exerciseId, weightKg: d.weight, reps: d.reps, rpe: rpeSet, isWarmup }),
       () => {
+        // Timer istirahat: lama dari kode (jenis gerakan, RPE, mode singkat). Nggak perlu setelah set terakhir.
+        const setTerakhir = !isWarmup && totalDone + 1 >= totalPlanned;
+        if (timerNyala(bacaSakelarMentah()) && !setTerakhir) {
+          mulaiTimer(istirahatDetik({ jenis: e.jenis, pemanasan: isWarmup, rpe: rpeSet, singkat: view.mode === "singkat" }));
+        }
         // Simpan nilai terakhir sebagai default set berikutnya; pindah ke gerakan berikut kalau set penuh
         setDrafts((prev) => ({ ...prev, [e.exerciseId]: d }));
         setRpe((prev) => ({ ...prev, [e.exerciseId]: null }));
@@ -90,9 +100,12 @@ export function Pencatat({ view }: { view: Berjalan }) {
           <p className="font-semibold">{view.dayName}</p>
           <p className="text-xs text-emerald-200/70">{view.mode === "singkat" ? "Versi singkat" : "Sesi berjalan"}</p>
         </div>
-        <p className="text-sm text-emerald-200">
-          {totalDone}/{totalPlanned} set
-        </p>
+        <div className="flex flex-col items-end gap-1.5">
+          <p className="text-sm text-emerald-200">
+            {totalDone}/{totalPlanned} set
+          </p>
+          <SakelarTimer />
+        </div>
       </div>
 
       {error && <p className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
@@ -229,7 +242,7 @@ export function Pencatat({ view }: { view: Berjalan }) {
               <button
                 key={x.n}
                 disabled={pending}
-                onClick={() => jalan(() => selesaiLatihan(x.n))}
+                onClick={() => jalan(() => selesaiLatihan(x.n), hentikanTimer)}
                 className="flex flex-col items-center gap-1 rounded-xl bg-white/10 py-3 active:bg-emerald-500/30 disabled:opacity-60"
               >
                 <span className="text-2xl">{x.emoji}</span>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { keluar } from "./actions.ts";
 import { NavBawah } from "./_components/NavBawah.tsx";
+import { TimerIstirahat } from "./_components/TimerIstirahat.tsx";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -23,6 +24,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* pb = tinggi menu bawah (±4rem) + area aman bawah (garis home iPhone) + napas */}
       <main className="flex-1 px-4 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))]">{children}</main>
+      <TimerIstirahat />
       <NavBawah />
     </div>
   );

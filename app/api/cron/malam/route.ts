@@ -1,11 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
-import { laporanMingguan, pengingatProtein, pengingatSuplemen } from "@/lib/bot/malam.ts";
+import { colekanLatihan, laporanMingguan, pengingatProtein, pengingatSuplemen } from "@/lib/bot/malam.ts";
 import { db } from "@/lib/supabase.ts";
 import { sendMessage } from "@/lib/telegram.ts";
 import { todayWIB } from "@/lib/time.ts";
 
 // Dipanggil Vercel Cron tiap hari (vercel.json: 0 12 * * * UTC = 19.00 WIB; di paket gratis bisa
-// bergeser di dalam jam itu). Isi: pengingat protein, dan di hari Minggu juga laporan mingguan.
+// bergeser di dalam jam itu). Isi: colekan anti-bolos (kalau belum latihan), pengingat protein,
+// suplemen, dan di hari Minggu juga laporan mingguan.
 export const maxDuration = 60;
 
 function sama(a: string, b: string): boolean {
@@ -38,6 +39,7 @@ export async function GET(request: Request) {
   const ctx = { send: (text: string, keyboard?: Parameters<typeof sendMessage>[2]) => sendMessage(chatId, text, keyboard), today };
   const hasil: Record<string, unknown> = {};
   try {
+    hasil.latihan = await colekanLatihan(ctx);
     hasil.protein = await pengingatProtein(ctx);
     hasil.suplemen = await pengingatSuplemen(ctx);
     hasil.laporan = await laporanMingguan(ctx, { tulis: true });

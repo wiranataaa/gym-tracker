@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireOwner } from "@/lib/auth.ts";
+import { ambilKonsistensi } from "@/lib/konsistensi/db.ts";
 import { kutipanHariIni, kutipanSelesai } from "@/lib/kutipan.ts";
 import { fmtDurasi, nilaiTidur, TARGET_TIDUR_JAM } from "@/lib/tidur/hitung.ts";
 import { getTidur, listTidur, tidurTerakhir } from "@/lib/tidur/db.ts";
@@ -8,6 +9,7 @@ import { loadTodayView } from "@/lib/workout/today.ts";
 import { PanelTidur, type RiwayatTidurView, type TidurView } from "./_components/PanelTidur.tsx";
 import { BannerTimbang } from "./_components/BannerTimbang.tsx";
 import { GantiMenu } from "./_components/GantiMenu.tsx";
+import { KartuMinggu } from "./_components/KartuMinggu.tsx";
 import { KesimpulanAI } from "./_components/KesimpulanAI.tsx";
 import { PanelMulai } from "./_components/PanelMulai.tsx";
 import { PanelSkip } from "./_components/PanelSkip.tsx";
@@ -19,11 +21,12 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
   await requireOwner();
   const { paksa } = await searchParams;
   const today = todayWIB();
-  const [view, tidurHariIni, tidur7, tidurAkhir] = await Promise.all([
+  const [view, tidurHariIni, tidur7, tidurAkhir, konsistensi] = await Promise.all([
     loadTodayView(today, paksa === "1"),
     getTidur(today),
     listTidur(today, 7),
     tidurTerakhir(),
+    ambilKonsistensi(today),
   ]);
   const tidurView: TidurView | null = tidurHariIni && {
     tanggalBangun: tidurHariIni.tanggalBangun,
@@ -62,6 +65,8 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
           <p className="mt-1.5 text-base font-semibold leading-snug">{kutipanHariIni(today)}</p>
         </div>
       )}
+
+      <KartuMinggu data={konsistensi} />
 
       <PanelTidur
         key={tidurView ? `${tidurView.jamTidur}-${tidurView.jamBangun}-${tidurView.kualitas}-${tidurView.catatan}` : "kosong"}

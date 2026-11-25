@@ -1,3 +1,4 @@
+import { ambilKonsistensi } from "../konsistensi/db.ts";
 import { persen } from "../nutrition/calc.ts";
 import { dayTotals } from "../nutrition/db.ts";
 import { labelOpsi, saranProtein } from "../nutrition/saran.ts";
@@ -50,6 +51,18 @@ export async function pengingatProtein(ctx: Ctx): Promise<boolean> {
   lines.push("", "Nilai gizi di atas perkiraan umum, sesuaikan porsinya. Habis makan, catat lewat foto biar progresnya kehitung.");
 
   await ctx.send(lines.join("\n"), [[{ text: "🍽️ Buka Nutrisi", url: `${APP_URL}/nutrisi` }]]);
+  return true;
+}
+
+/**
+ * Colekan anti-bolos sore: hari latihan, belum ada sesi, jatah minggu ini belum penuh.
+ * Diam kalau hari ini sudah latihan, lagi latihan, atau sengaja di-skip. Teksnya dari kode.
+ */
+export async function colekanLatihan(ctx: Ctx): Promise<boolean> {
+  const today = ctx.today ?? todayWIB();
+  const { malam } = await ambilKonsistensi(today);
+  if (!malam) return false;
+  await ctx.send(`💢 ${malam}`, [[{ text: "💪 Buka app, mulai", url: APP_URL }]]);
   return true;
 }
 

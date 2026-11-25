@@ -1,4 +1,6 @@
 import { statusTimbang } from "../body/db.ts";
+import { ambilKonsistensi } from "../konsistensi/db.ts";
+import { barisTitik } from "../konsistensi/hitung.ts";
 import { kutipanHariIni } from "../kutipan.ts";
 import { addDays, fmtInt, fmtKg, isoWeekday, namaHari, tglLengkap, todayWIB } from "../time.ts";
 import { dayTotals } from "../nutrition/db.ts";
@@ -24,12 +26,13 @@ export async function pesanPagi(ctx: Ctx): Promise<void> {
   const today = ctx.today ?? todayWIB();
   const kemarin = addDays(today, -1);
 
-  const [sesi, nut, settings, st, suplemen] = await Promise.all([
+  const [sesi, nut, settings, st, suplemen, konsistensi] = await Promise.all([
     listSessions(40),
     dayTotals(kemarin),
     getSettings(),
     statusTimbang(today),
     belumDiminum(today),
+    ambilKonsistensi(today),
   ]);
   const sKemarin = sesi.filter((s) => s.date === kemarin && s.status === "selesai" && s.totalSets > 0);
 
@@ -41,10 +44,16 @@ export async function pesanPagi(ctx: Ctx): Promise<void> {
     const energi = sKemarin.find((s) => s.energy)?.energy;
     lines.push(`🏋️ Kemarin: ${sKemarin.map((s) => s.dayName).join(" + ")} — ${sets} set · ${fmtInt(vol)} kg${energi ? ` · energi ${energi}/5` : ""}`);
   } else if (settings.workout_days.includes(isoWeekday(kemarin))) {
-    lines.push("🏋️ Kemarin nggak latihan. Nggak apa-apa, hari ini mulai lagi dari menu yang sama.");
+    // Kalau sudah beberapa hari kosong, colekan di bawah yang bicara; kalau cuma kemarin, santai saja
+    lines.push(konsistensi.pagi.level > 0 ? "🏋️ Kemarin nggak latihan." : "🏋️ Kemarin nggak latihan. Nggak apa-apa, hari ini mulai lagi dari menu yang sama.");
   } else {
     lines.push("🏋️ Kemarin hari istirahat.");
   }
+
+  // Anti-bolos: titik minggu ini + colekan kalau sudah beberapa hari kerja kosong
+  const { minggu } = konsistensi;
+  lines.push(`📅 Minggu ini ${minggu.selesai}/${minggu.target} sesi (${minggu.skor}%): ${barisTitik(minggu.titik)}`);
+  if (konsistensi.pagi.teks) lines.push(`💢 ${konsistensi.pagi.teks}`);
 
   if (nut.count > 0) {
     lines.push(`🍽️ Kemarin: ${fmtInt(nut.kcal)} / ${fmtInt(settings.target_kcal)} kcal · protein ${fmtKg(nut.proteinG)} / ${settings.target_protein_g} g`);

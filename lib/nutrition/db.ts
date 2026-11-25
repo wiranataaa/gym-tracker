@@ -4,7 +4,7 @@ import { db, must } from "../supabase.ts";
 import { addDays, todayWIB } from "../time.ts";
 import { scaleRange, sumItems } from "./calc.ts";
 
-const BUCKET = "meal-photos";
+export const BUCKET = "meal-photos";
 
 export type MealItem = {
   id: number;

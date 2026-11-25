@@ -1,11 +1,14 @@
 import { requireOwner } from "@/lib/auth.ts";
 import { getTargets, isStandar, LABEL_KONDISI, listMeasurements } from "@/lib/body/db.ts";
 import { dailyValues, movingAverage7, outlook, weeklyRate } from "@/lib/body/trend.ts";
+import { listFoto, urlFoto } from "@/lib/foto/db.ts";
+import { bandingkan, hariSejakFoto, kelompokkan, SUDUT, type Sudut } from "@/lib/foto/hitung.ts";
 import { laporanTerakhir } from "@/lib/report/mingguan.ts";
 import { fmtKg, tglLengkap, tglSingkat, todayWIB } from "@/lib/time.ts";
 import { BarisTimbangan } from "./BarisTimbangan.tsx";
 import { FormTimbang } from "./FormTimbang.tsx";
 import { GrafikBerat } from "./GrafikBerat.tsx";
+import { KartuFoto, type BandingView, type GrupView } from "./KartuFoto.tsx";
 import { KartuTanita } from "./KartuTanita.tsx";
 
 const SUMBER: Record<string, string> = { manual: "app", telegram: "Telegram", foto_tanita: "foto Tanita" };
@@ -13,7 +16,32 @@ const SUMBER: Record<string, string> = { manual: "app", telegram: "Telegram", fo
 export default async function BadanPage() {
   await requireOwner();
   const today = todayWIB();
-  const [list, t, laporan] = await Promise.all([listMeasurements(), getTargets(), laporanTerakhir()]);
+  const [list, t, laporan, fotoBaris] = await Promise.all([listMeasurements(), getTargets(), laporanTerakhir(), listFoto()]);
+  const fotoGrup = kelompokkan(fotoBaris);
+  const fotoUrl = await urlFoto(fotoBaris.map((f) => f.path));
+  const beratTeks = (kg: number | null) => (kg == null ? null : `${fmtKg(kg)} kg`);
+  const grupView: GrupView[] = fotoGrup.map((g) => ({
+    tanggal: g.tanggal,
+    tglTeks: tglSingkat(g.tanggal),
+    beratTeks: beratTeks(g.beratKg),
+    foto: Object.fromEntries(Object.entries(g.foto).map(([s, f]) => [s, { id: f.id, url: fotoUrl.get(f.path) ?? "" }])),
+  }));
+  const bandingView = Object.fromEntries(
+    SUDUT.map(({ nilai }) => {
+      const b = bandingkan(fotoGrup, nilai);
+      if (!b) return [nilai, null];
+      const berat = b.selisihKg == null ? "" : `, berat ${b.selisihKg >= 0 ? "+" : ""}${fmtKg(b.selisihKg)} kg`;
+      return [
+        nilai,
+        {
+          awal: { tglTeks: tglSingkat(b.awal.tanggal), url: fotoUrl.get(b.awal.path) ?? "", beratTeks: beratTeks(b.awal.beratKg) },
+          terbaru: { tglTeks: tglSingkat(b.terbaru.tanggal), url: fotoUrl.get(b.terbaru.path) ?? "", beratTeks: beratTeks(b.terbaru.beratKg) },
+          ringkas: `Jarak ${b.hari} hari${berat}. Bandingin bentuk, bukan cuma angka timbangan.`,
+        } satisfies BandingView,
+      ];
+    }),
+  ) as Record<Sudut, BandingView | null>;
+  const sudahHariIni = (fotoGrup[0]?.tanggal === today ? Object.keys(fotoGrup[0].foto) : []) as Sudut[];
 
   const harian = dailyValues(list.map((m) => ({ date: m.date, weightKg: m.weightKg })));
   const rata7 = movingAverage7(harian);
@@ -31,6 +59,8 @@ export default async function BadanPage() {
       <FormTimbang awal={terakhir?.weightKg ?? 71} />
 
       <KartuTanita />
+
+      <KartuFoto grup={grupView} banding={bandingView} sudahHariIni={sudahHariIni} hariSejak={hariSejakFoto(today, fotoGrup[0]?.tanggal ?? null)} />
 
       {terakhir && o && (
         <div className="grid grid-cols-3 gap-2 text-center">

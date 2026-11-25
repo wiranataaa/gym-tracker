@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import type { Kondisi } from "@/lib/body/db.ts";
 import type { KomposisiBaca } from "@/lib/body/tanitaValid.ts";
+import { perkecilFoto } from "../_components/perkecilFoto.ts";
 import { PILIHAN } from "./FormTimbang.tsx";
 import { bacaTanitaApp, simpanTanitaApp } from "./tanitaActions.ts";
 
@@ -19,19 +20,6 @@ const KOLOM: { kunci: keyof KomposisiBaca; label: string; satuan: string }[] = [
   { kunci: "bmrKcal", label: "BMR", satuan: "kcal" },
   { kunci: "metabolicAge", label: "Usia metabolik", satuan: "" },
 ];
-
-/** Perkecil foto di browser (maks 1600 px, JPEG) supaya cepat diunggah dan di bawah batas ukuran. */
-async function perkecil(file: File): Promise<File> {
-  const bmp = await createImageBitmap(file);
-  const skala = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
-  const kanvas = document.createElement("canvas");
-  kanvas.width = Math.round(bmp.width * skala);
-  kanvas.height = Math.round(bmp.height * skala);
-  kanvas.getContext("2d")!.drawImage(bmp, 0, 0, kanvas.width, kanvas.height);
-  const blob = await new Promise<Blob | null>((r) => kanvas.toBlob(r, "image/jpeg", 0.85));
-  if (!blob) throw new Error("Gagal memperkecil foto");
-  return new File([blob], "tanita.jpg", { type: "image/jpeg" });
-}
 
 type Tahap = "diam" | "membaca" | "periksa";
 
@@ -51,7 +39,7 @@ export function KartuTanita() {
     setPesan(null);
     setTahap("membaca");
     try {
-      const kecil = await perkecil(file);
+      const kecil = await perkecilFoto(file, 1600, "tanita.jpg");
       const fd = new FormData();
       fd.set("foto", kecil);
       const r = await bacaTanitaApp(fd);

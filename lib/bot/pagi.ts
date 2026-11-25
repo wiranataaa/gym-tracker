@@ -1,4 +1,6 @@
 import { statusTimbang } from "../body/db.ts";
+import { tanggalFotoTerakhir } from "../foto/db.ts";
+import { pengingatFoto } from "../foto/hitung.ts";
 import { ambilKonsistensi } from "../konsistensi/db.ts";
 import { barisTitik } from "../konsistensi/hitung.ts";
 import { kutipanHariIni } from "../kutipan.ts";
@@ -26,13 +28,14 @@ export async function pesanPagi(ctx: Ctx): Promise<void> {
   const today = ctx.today ?? todayWIB();
   const kemarin = addDays(today, -1);
 
-  const [sesi, nut, settings, st, suplemen, konsistensi] = await Promise.all([
+  const [sesi, nut, settings, st, suplemen, konsistensi, fotoTerakhir] = await Promise.all([
     listSessions(40),
     dayTotals(kemarin),
     getSettings(),
     statusTimbang(today),
     belumDiminum(today),
     ambilKonsistensi(today),
+    tanggalFotoTerakhir(),
   ]);
   const sKemarin = sesi.filter((s) => s.date === kemarin && s.status === "selesai" && s.totalSets > 0);
 
@@ -94,11 +97,16 @@ export async function pesanPagi(ctx: Ctx): Promise<void> {
   });
   lines.push(...timbang.baris);
 
+  // Foto progres bulanan (Jumat kalau sudah >= 28 hari; kalau belum pernah foto, Senin/Rabu/Jumat)
+  const foto = pengingatFoto(today, fotoTerakhir);
+  if (foto) lines.push(...foto);
+
   const baris: Button[][] = [
     [
       { text: "📱 Buka app", url: APP_URL },
       ...(tidur.sudah ? [] : [{ text: "😴 Catat tidur", url: APP_URL }]),
       ...(timbang.perlu ? [{ text: "⚖️ Catat timbangan", url: `${APP_URL}/badan` }] : []),
+      ...(foto ? [{ text: "📸 Foto progres", url: `${APP_URL}/badan` }] : []),
     ],
   ];
   if (tombolSuplemen.length > 0) baris.push(tombolSuplemen);

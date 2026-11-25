@@ -59,7 +59,7 @@ const HELP = [
   "kardio 20 — catat menit kardio (jalan di treadmill)",
   "📸 Kirim foto makanan — gua hitung kalori dan proteinnya",
   "⚖️ Kirim screenshot layar Tanita dengan caption 'tanita' — gua baca semua angka komposisi badan (konfirmasi dulu sebelum disimpan)",
-  "/makan nasi putih + ayam bakar + tempe 2 — hitung dari teks",
+  "/makan nasi putih + ayam bakar + tempe 2 — hitung dari teks. Lupa foto? Ketik aja kayak ngobrol: 'tadi makan pizza 2 potong'",
   "/fav — catat makanan favorit sekali tap",
   "/nutrisi — progres kalori dan protein hari ini",
   "",
@@ -276,13 +276,18 @@ const BANTUAN_FORMAT = "Format nggak kebaca 🤔 Coba kayak gini:\nbench 60x10x3
 
 /** Format cepat gagal: coba kalimat bebas lewat AI kecil, lalu minta konfirmasi Nata (nggak langsung disimpan). */
 async function tanyaKalimatBebas(ctx: Ctx, text: string): Promise<void> {
-  // Pesan tanpa angka atau terlalu panjang jelas bukan laporan set: nggak perlu panggil AI
-  if (!/\d/.test(text) || text.length > 200) {
+  // Pesan yang terlalu pendek atau panjang jelas bukan laporan set maupun makanan: nggak perlu panggil AI
+  if (text.length < 4 || text.length > 200) {
     await ctx.send(BANTUAN_FORMAT);
     return;
   }
   const exercises = await loadExercises();
   const tebakan = await tebakSetBebas(text, exercises.map((e) => ({ nama: e.name, bodyweight: e.is_bodyweight })));
+  // "tadi makan pizza 2 potong" tanpa /makan: arahkan ke penghitung kalori
+  if (!tebakan.ok && tebakan.alasan === "makanan") {
+    await handleMakanText(ctx, text);
+    return;
+  }
   if (!tebakan.ok) {
     await ctx.send(
       tebakan.alasan === "tidak_jelas"

@@ -5,10 +5,14 @@ import { bagiRamadan } from "@/lib/ramadan/ramadan.ts";
 import { dayTotals, listFavorites, listMeals, recentDays, signedPhotoUrls } from "@/lib/nutrition/db.ts";
 import { addDays, fmtInt, fmtKg, tglPendek, todayWIB } from "@/lib/time.ts";
 import { getSettings } from "@/lib/workout/db.ts";
+import { FormMakanTeks } from "./FormMakanTeks.tsx";
 import { KartuMakan, type MakanView } from "./KartuMakan.tsx";
 import { PanelFavorit } from "./PanelFavorit.tsx";
 import { PanelSuplemen } from "./PanelSuplemen.tsx";
 import { hitungHariIni, listSuplemen } from "@/lib/suplemen/db.ts";
+
+// Server action "Hitung kalori" jalan di route ini: kasih waktu cukup buat panggilan AI
+export const maxDuration = 60;
 
 const SUMBER: Record<string, string> = { foto: "foto", teks: "teks", favorit: "favorit", manual: "manual" };
 
@@ -122,8 +126,8 @@ export default async function NutrisiPage({ searchParams }: { searchParams: Prom
                 Kirim <b className="text-slate-200">foto makanan</b> ke bot Telegram{" "}
                 <a href="https://t.me/gym_tracker_nata_bot" className="text-emerald-300 underline">
                   @gym_tracker_nata_bot
-                </a>{" "}
-                atau catat dari favorit di bawah.
+                </a>
+                , ketik di kotak bawah, atau catat dari favorit.
               </>
             )}
           </div>
@@ -135,6 +139,8 @@ export default async function NutrisiPage({ searchParams }: { searchParams: Prom
           </div>
         )}
       </div>
+
+      {isToday && <FormMakanTeks />}
 
       <div>
         <p className="mb-2 px-1 text-sm font-medium text-slate-300">💊 Suplemen</p>

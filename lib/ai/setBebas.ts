@@ -10,7 +10,9 @@ import { logUsage } from "./usage.ts";
 export const MODEL = "claude-haiku-5-5";
 
 const Hasil = z.object({
-  adalah_set_latihan: z.boolean().describe("false kalau pesan ini bukan laporan set latihan angkat beban"),
+  jenis: z
+    .enum(["set_latihan", "makanan", "lainnya"])
+    .describe("set_latihan = laporan satu gerakan angkat beban; makanan = pesan yang menceritakan makanan/minuman yang dimakan (mis. 'tadi makan pizza 2 potong'); lainnya = selain itu"),
   gerakan: z.string().describe("Nama gerakan PERSIS salah satu dari DAFTAR GERAKAN, atau string kosong kalau nggak ada yang cocok"),
   beban_kg: z.number().nullable().describe("Beban dalam kg; 0 untuk gerakan berat badan sendiri; null kalau nggak disebut"),
   reps: z.array(z.number()).describe("Jumlah reps per set, satu angka per set. '3 set 10 kali' = [10,10,10]"),
@@ -20,15 +22,15 @@ const Hasil = z.object({
 
 export type TebakanSet = { gerakan: string; bebanKg: number; reps: number[]; rpe: number | null; pemanasan: boolean };
 
-export type HasilTebakSet = { ok: true; set: TebakanSet } | { ok: false; alasan: "bukan_set" | "tidak_jelas" | "error" };
+export type HasilTebakSet = { ok: true; set: TebakanSet } | { ok: false; alasan: "bukan_set" | "makanan" | "tidak_jelas" | "error" };
 
-const SYSTEM = `Kamu mengubah pesan singkat berbahasa Indonesia santai dari seseorang yang sedang angkat beban menjadi data satu gerakan.
+const SYSTEM = `Kamu membaca pesan singkat berbahasa Indonesia santai dari seseorang yang sedang angkat beban. Pertama tentukan jenis pesannya: set_latihan (laporan satu gerakan angkat beban), makanan (menceritakan makanan atau minuman yang dia makan atau minum, mis. "tadi makan pizza 2 potong", "sarapan nasi uduk"), atau lainnya. Kalau set_latihan, ubah jadi data satu gerakan.
 
 Aturan:
 - Pilih nama gerakan HANYA dari DAFTAR GERAKAN yang diberikan (tulis persis). Kalau nggak ada yang cocok, kosongkan.
 - "kilo", "kg", "kiloan" = kilogram. "3 set 10 kali", "3x10", "10 reps 3 set" = reps [10,10,10]. "10, 9, 8" = [10,9,8].
 - Jangan mengarang. Kalau beban atau jumlah reps nggak disebut jelas, isi null/kosongkan.
-- Kalau pesannya bukan laporan latihan (obrolan biasa, pertanyaan, makanan), set adalah_set_latihan=false.`;
+- Kalau pesannya menceritakan makanan atau minuman, jenis = makanan (isi field lain sekenanya). Kalau obrolan biasa atau pertanyaan, jenis = lainnya.`;
 
 export type GerakanDaftar = { nama: string; bodyweight: boolean };
 
@@ -47,7 +49,8 @@ export async function tebakSetBebas(teks: string, daftar: GerakanDaftar[]): Prom
 
     const h = response.parsed_output;
     if (!h || response.stop_reason === "refusal") return { ok: false, alasan: "error" };
-    if (!h.adalah_set_latihan) return { ok: false, alasan: "bukan_set" };
+    if (h.jenis === "makanan") return { ok: false, alasan: "makanan" };
+    if (h.jenis !== "set_latihan") return { ok: false, alasan: "bukan_set" };
 
     // Penjaga kode: gerakan harus ada di daftar, beban dan reps harus masuk akal
     const cocok = daftar.find((d) => d.nama.toLowerCase() === h.gerakan.trim().toLowerCase());

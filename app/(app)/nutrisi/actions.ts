@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { requireOwner } from "@/lib/auth.ts";
+import { estimateFromText } from "@/lib/ai/nutrition.ts";
 import { PORTION_FACTORS } from "@/lib/nutrition/calc.ts";
 import { batalSuplemen, catatSuplemen, getSuplemen, hitungHariIni, ubahSuplemen } from "@/lib/suplemen/db.ts";
 import { todayWIB } from "@/lib/time.ts";
 import {
   addFavoriteFromMeal,
+  createDraft,
   deleteFavorite,
   deleteMeal,
   logFavorite,
@@ -39,6 +41,22 @@ export async function hapusMakan(id: number): Promise<Result> {
   await requireOwner();
   if (!validId(id)) return { ok: false, error: "Data nggak valid" };
   await deleteMeal(id);
+  refresh();
+  return { ok: true };
+}
+
+/** Catat makanan dari teks (lupa difoto). Hasilnya jadi draft di daftar Makan, tinggal Simpan / ubah porsi. */
+export async function hitungMakanTeks(teks: string): Promise<Result> {
+  await requireOwner();
+  const t = (teks ?? "").trim();
+  if (t.length < 3) return { ok: false, error: "Tulis dulu makanannya, contoh: pizza 2 potong" };
+  if (t.length > 300) return { ok: false, error: "Kepanjangan, ringkas dikit (maks 300 karakter)" };
+  const hasil = await estimateFromText(t);
+  if (!hasil.ok) return { ok: false, error: hasil.reason };
+  if (!hasil.data.ada_makanan || hasil.data.item.length === 0) {
+    return { ok: false, error: "Itu kayaknya bukan makanan 🤔 Coba tulis lebih jelas." };
+  }
+  await createDraft({ source: "teks", data: hasil.data, aiModel: hasil.model, date: todayWIB() });
   refresh();
   return { ok: true };
 }

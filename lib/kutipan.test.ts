@@ -9,6 +9,18 @@ test("tiap kutipan unik dan nggak kosong", () => {
   assert.ok(KUTIPAN.length >= 50);
 });
 
+test("semua kutipan berbahasa Inggris (permintaan pemilik): nggak ada kata Indonesia umum", () => {
+  const kataIndonesia = /\b(lo|gua|nggak|yang|banget|kayak|aja|udah|buat|sama|dong|bro|kalau|karena|dengan|itu|ini)\b/i;
+  const semua = [...KUTIPAN, ...KUTIPAN_SELESAI];
+  // "bro" boleh (slang Inggris juga), jadi dikeluarkan dari pemeriksaan
+  for (const k of semua) assert.ok(!kataIndonesia.test(k.replace(/\bbro\b/gi, "")), `kelihatan bahasa Indonesia: ${k}`);
+});
+
+test("nggak ada kata yang menyerang kelompok (SARA/slur) dan nggak menyuruh hal nggak sehat", () => {
+  const terlarang = /\b(nigg|fag|retard|spic|kike|chink|tranny|starve|stop eating|skip meals|purge|kill yourself|kys)\w*/i;
+  for (const k of [...KUTIPAN, ...KUTIPAN_SELESAI]) assert.ok(!terlarang.test(k), `kutipan bermasalah: ${k}`);
+});
+
 test("tanggal yang sama selalu memberi kutipan yang sama", () => {
   assert.equal(kutipanHariIni("2026-11-25"), kutipanHariIni("2026-11-25"));
 });

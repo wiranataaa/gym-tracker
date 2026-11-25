@@ -30,12 +30,12 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
       {/* Pecut harian (beda tiap hari). Setelah latihan selesai ganti jadi pengakuan singkat. */}
       {view.kind === "selesai" ? (
         <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4">
-          <p className="text-xs uppercase tracking-wide text-emerald-300/80">✅ Hari ini</p>
+          <p className="text-xs uppercase tracking-wide text-emerald-300/80">✅ Done for today</p>
           <p className="mt-1.5 text-base font-semibold leading-snug">{kutipanSelesai(today)}</p>
         </div>
       ) : (
         <div className="rounded-2xl border border-orange-400/25 bg-gradient-to-br from-orange-500/15 to-red-500/10 p-4">
-          <p className="text-xs uppercase tracking-wide text-orange-300/80">🔥 Pecut hari ini</p>
+          <p className="text-xs uppercase tracking-wide text-orange-300/80">🔥 Today&apos;s kick in the ass</p>
           <p className="mt-1.5 text-base font-semibold leading-snug">{kutipanHariIni(today)}</p>
         </div>
       )}

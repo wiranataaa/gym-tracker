@@ -3,6 +3,8 @@ import { detectPR, estimate1RM } from "../program/pr.ts";
 import { nextProgramDay } from "../program/queue.ts";
 import { dayTotals } from "../nutrition/db.ts";
 import { db, must } from "../supabase.ts";
+import { getTidur, listTidur } from "../tidur/db.ts";
+import { fmtDurasi, jamDesimal, jamWIB, nilaiTidur, rataMenit, TARGET_TIDUR_JAM } from "../tidur/hitung.ts";
 import { addDays, isoWeekday, namaHari } from "../time.ts";
 import { getHistory, getSettings, loadExercises, loadProgram, loadRecentSessions } from "./db.ts";
 import { getSessionDetail } from "./history.ts";
@@ -38,6 +40,25 @@ export type SummaryInput = {
     jumlah_makan_tercatat: number;
   };
   besok: { jenis: "latihan" | "istirahat"; nama_program: string | null; hari: string };
+  /** Jam di gym (WIB, "HH:MM"). selesai null kalau sesi belum ditutup. */
+  jam_gym: { mulai: string; selesai: string | null; durasi_menit: number | null };
+  /** Tidur semalam (bangun di tanggal sesi). null kalau belum dicatat. */
+  tidur: TidurSummary | null;
+};
+
+export type TidurSummary = {
+  jam_tidur: string;
+  jam_bangun: string;
+  durasi_jam: number;
+  durasi_teks: string;
+  target_jam: number;
+  status: "cukup" | "agak_kurang" | "kurang";
+  kualitas_1_sampai_5: number | null;
+  catatan_nata: string | null;
+  /** jam dari bangun sampai mulai gym; null kalau tidak masuk akal (mis. latihan sebelum bangun) */
+  jam_bangun_ke_gym: number | null;
+  rata2_tidur_7_hari_jam: number | null;
+  malam_tercatat_7_hari: number;
 };
 
 const r0 = (n: number) => Math.round(n);
@@ -115,6 +136,32 @@ export async function buildSummaryInput(sessionId: number): Promise<SummaryInput
     }
   }
 
+  // Jam gym + tidur semalam (pembacaan aman: kalau tabel tidur belum ada hasilnya kosong)
+  const sesiWaktu = must(await db().from("workout_sessions").select("started_at,ended_at").eq("id", sessionId).maybeSingle()) as { started_at: string; ended_at: string | null } | null;
+  const [tidur, tidur7] = await Promise.all([getTidur(detail.date), listTidur(detail.date, 7)]);
+  const mulaiGym = sesiWaktu?.started_at ?? null;
+  const selesaiGym = sesiWaktu?.ended_at ?? null;
+  const durasiGym = mulaiGym && selesaiGym ? Math.round((new Date(selesaiGym).getTime() - new Date(mulaiGym).getTime()) / 60_000) : null;
+  let tidurData: TidurSummary | null = null;
+  if (tidur) {
+    const n = nilaiTidur(tidur.durasiMenit);
+    const rata = rataMenit(tidur7.map((t) => t.durasiMenit));
+    const bangunKeGym = mulaiGym && tidur ? (new Date(mulaiGym).getTime() - new Date(`${tidur.tanggalBangun}T${tidur.jamBangun}:00+07:00`).getTime()) / 3_600_000 : null;
+    tidurData = {
+      jam_tidur: tidur.jamTidur,
+      jam_bangun: tidur.jamBangun,
+      durasi_jam: jamDesimal(tidur.durasiMenit),
+      durasi_teks: fmtDurasi(tidur.durasiMenit),
+      target_jam: TARGET_TIDUR_JAM,
+      status: n.level === "pas" ? "agak_kurang" : n.level,
+      kualitas_1_sampai_5: tidur.kualitas,
+      catatan_nata: tidur.catatan,
+      jam_bangun_ke_gym: bangunKeGym != null && bangunKeGym >= 0 && bangunKeGym <= 24 ? Math.round(bangunKeGym * 10) / 10 : null,
+      rata2_tidur_7_hari_jam: rata != null ? jamDesimal(rata) : null,
+      malam_tercatat_7_hari: tidur7.length,
+    };
+  }
+
   const besokTanggal = addDays(detail.date, 1);
   const berikutnya = nextProgramDay(days, sessions);
   const besokLatihan = settings.workout_days.includes(isoWeekday(besokTanggal));
@@ -144,6 +191,8 @@ export async function buildSummaryInput(sessionId: number): Promise<SummaryInput
       nama_program: berikutnya?.name ?? null,
       hari: namaHari(besokTanggal),
     },
+    jam_gym: { mulai: mulaiGym ? jamWIB(mulaiGym) : "-", selesai: selesaiGym ? jamWIB(selesaiGym) : null, durasi_menit: durasiGym },
+    tidur: tidurData,
   };
 }
 

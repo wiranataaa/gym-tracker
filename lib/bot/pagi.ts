@@ -11,6 +11,7 @@ import { handleBotInput, type Ctx } from "./handlers.ts";
 import { hariKeRamadan } from "../ramadan/ramadan.ts";
 import { pengingatTimbang } from "./pengingat.ts";
 import { teksBagiRamadan } from "./ramadan.ts";
+import { barisTidurPagi } from "./tidur.ts";
 
 export const APP_URL = process.env.APP_URL ?? "https://gym-tracker-nu-two-90.vercel.app";
 
@@ -62,6 +63,10 @@ export async function pesanPagi(ctx: Ctx): Promise<void> {
     if (hari != null && hari <= 7) lines.push("", `🌙 Ramadan mulai ${hari} hari lagi. Mode Ramadan aktif otomatis (target maintenance, volume latihan dikurangi). Tanggal bisa dicek di app → Pengaturan.`);
   }
 
+  // Tidur semalam: ingatkan catat (tombol ke app), atau ringkas kalau sudah dicatat
+  const tidur = await barisTidurPagi(today);
+  lines.push("", tidur.baris);
+
   // Suplemen yang minta diingatkan (creatine): tinggal tap "udah" kalau sudah diminum
   const tombolSuplemen: Button[] = [];
   if (suplemen.length > 0) {
@@ -81,7 +86,11 @@ export async function pesanPagi(ctx: Ctx): Promise<void> {
   lines.push(...timbang.baris);
 
   const baris: Button[][] = [
-    [{ text: "📱 Buka app", url: APP_URL }, ...(timbang.perlu ? [{ text: "⚖️ Catat timbangan", url: `${APP_URL}/badan` }] : [])],
+    [
+      { text: "📱 Buka app", url: APP_URL },
+      ...(tidur.sudah ? [] : [{ text: "😴 Catat tidur", url: APP_URL }]),
+      ...(timbang.perlu ? [{ text: "⚖️ Catat timbangan", url: `${APP_URL}/badan` }] : []),
+    ],
   ];
   if (tombolSuplemen.length > 0) baris.push(tombolSuplemen);
   await ctx.send(lines.join("\n"), baris);

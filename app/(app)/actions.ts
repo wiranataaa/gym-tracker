@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { buatKesimpulanSesi } from "@/lib/ai/summary.ts";
 import { requireOwner, supabaseAuth } from "@/lib/auth.ts";
-import { todayWIB } from "@/lib/time.ts";
+import { hapusTidur, simpanTidur } from "@/lib/tidur/db.ts";
+import { addDays, todayWIB } from "@/lib/time.ts";
 import {
   closeStaleSessions,
   deleteSet,
@@ -26,6 +27,30 @@ type Result = { ok: true } | { ok: false; error: string };
 
 function refresh() {
   revalidatePath("/");
+}
+
+/** Catat tidur dari app. kemarin=true kalau bangunnya kemarin (lupa mencatat). */
+export async function simpanTidurApp(input: { jamTidur: string; jamBangun: string; kualitas: number | null; catatan: string; kemarin: boolean }): Promise<Result> {
+  await requireOwner();
+  const hariIni = todayWIB();
+  const r = await simpanTidur({
+    tanggalBangun: input.kemarin ? addDays(hariIni, -1) : hariIni,
+    jamTidur: String(input.jamTidur ?? ""),
+    jamBangun: String(input.jamBangun ?? ""),
+    kualitas: input.kualitas == null ? null : Number(input.kualitas),
+    catatan: String(input.catatan ?? "").slice(0, 300),
+  });
+  if (!r.ok) return { ok: false, error: r.error };
+  refresh();
+  return { ok: true };
+}
+
+export async function hapusTidurApp(tanggalBangun: string): Promise<Result> {
+  await requireOwner();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalBangun)) return { ok: false, error: "Tanggal nggak valid" };
+  await hapusTidur(tanggalBangun);
+  refresh();
+  return { ok: true };
 }
 
 export async function keluar() {

@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { requireOwner } from "@/lib/auth.ts";
 import { kutipanHariIni, kutipanSelesai } from "@/lib/kutipan.ts";
+import { fmtDurasi, nilaiTidur, TARGET_TIDUR_JAM } from "@/lib/tidur/hitung.ts";
+import { getTidur, listTidur, tidurTerakhir } from "@/lib/tidur/db.ts";
 import { namaHari, todayWIB, fmtInt, fmtKg } from "@/lib/time.ts";
 import { loadTodayView } from "@/lib/workout/today.ts";
+import { PanelTidur, type RiwayatTidurView, type TidurView } from "./_components/PanelTidur.tsx";
 import { BannerTimbang } from "./_components/BannerTimbang.tsx";
 import { GantiMenu } from "./_components/GantiMenu.tsx";
 import { KesimpulanAI } from "./_components/KesimpulanAI.tsx";
@@ -16,7 +19,27 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
   await requireOwner();
   const { paksa } = await searchParams;
   const today = todayWIB();
-  const view = await loadTodayView(today, paksa === "1");
+  const [view, tidurHariIni, tidur7, tidurAkhir] = await Promise.all([
+    loadTodayView(today, paksa === "1"),
+    getTidur(today),
+    listTidur(today, 7),
+    tidurTerakhir(),
+  ]);
+  const tidurView: TidurView | null = tidurHariIni && {
+    tanggalBangun: tidurHariIni.tanggalBangun,
+    jamTidur: tidurHariIni.jamTidur,
+    jamBangun: tidurHariIni.jamBangun,
+    durasiTeks: fmtDurasi(tidurHariIni.durasiMenit),
+    ...nilaiTidur(tidurHariIni.durasiMenit),
+    kualitas: tidurHariIni.kualitas,
+    catatan: tidurHariIni.catatan,
+  };
+  const riwayatTidur: RiwayatTidurView[] = [...tidur7].reverse().map((t) => ({
+    tanggal: t.tanggalBangun,
+    hari: namaHari(t.tanggalBangun).slice(0, 3),
+    durasiTeks: fmtDurasi(t.durasiMenit).replace(" jam ", "j ").replace(" menit", "m").replace(" jam", "j"),
+    level: nilaiTidur(t.durasiMenit).level,
+  }));
 
   return (
     <div className="space-y-4">
@@ -39,6 +62,14 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
           <p className="mt-1.5 text-base font-semibold leading-snug">{kutipanHariIni(today)}</p>
         </div>
       )}
+
+      <PanelTidur
+        key={tidurView ? `${tidurView.jamTidur}-${tidurView.jamBangun}-${tidurView.kualitas}-${tidurView.catatan}` : "kosong"}
+        hariIni={tidurView}
+        riwayat={riwayatTidur}
+        awal={{ jamTidur: tidurAkhir?.jamTidur ?? "23:00", jamBangun: tidurAkhir?.jamBangun ?? "06:00" }}
+        targetJam={TARGET_TIDUR_JAM}
+      />
 
       {view.kind === "tanpa_program" && (
         <Kartu>Program latihan belum ada di database.</Kartu>

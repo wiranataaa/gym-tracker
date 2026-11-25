@@ -16,6 +16,9 @@ const Kesimpulan = z.object({
   pertahankan: z.string().describe("Apa yang perlu dipertahankan. Maks 2 kalimat."),
   perbaiki: z.array(z.string()).describe("1-2 poin konkret yang perlu diperbaiki. Kalau memang nggak ada, satu poin kecil yang realistis."),
   nutrisi: z.string().describe("Status nutrisi hari ini dari data. Maks 2 kalimat."),
+  tidur: z
+    .string()
+    .describe("Tidur dan istirahat: jam tidur, jam bangun, durasi, jam gym, dan apakah istirahatnya cukup, dari data. Maks 3 kalimat. Kalau data tidur null, bilang belum dicatat dan ajak catat besok pagi."),
   besok: z.string().describe("Gambaran besok (latihan apa atau istirahat). Maks 1-2 kalimat."),
 });
 type KesimpulanData = z.infer<typeof Kesimpulan>;
@@ -24,13 +27,17 @@ const SYSTEM = `Kamu teman gym yang paham data, menulis kesimpulan latihan haria
 
 Aturan keras:
 - Pakai HANYA angka yang ada di DATA. Jangan menghitung, menebak, atau membulatkan angka baru. Kalau mau bilang selisih, hanya kalau selisihnya jelas dari dua angka di data.
-- Jangan mengklaim hal yang nggak ada di data: soal teknik/form, rasa di otot, tidur, stres, atau niat. Kamu cuma tahu angka di DATA.
+- Jangan mengklaim hal yang nggak ada di data: soal teknik/form, rasa di otot, stres, atau niat. Kamu cuma tahu isi DATA.
 - Bahasa Indonesia santai, singkat, langsung ke inti. Sebut nama gerakan dan angka spesifik.
 - Jujur: kalau stagnan atau rep turun, bilang jelas plus satu saran konkret. Jangan motivasi generik yang nggak nyambung ke data.
 - Kalau jumlah_makan_tercatat = 0, bilang belum ada catatan makan hari ini, jangan menebak kalori.
 - Kalau energi 1-2, kaitkan ke performa dengan hati-hati (jangan menyalahkan). Kalau mode "singkat", hargai bahwa tetap datang.
 - Tidak memberi saran medis. Kalau ada kata nyeri/cedera di data, sarankan istirahatkan bagian itu dan konsultasi ke tenaga kesehatan kalau berlanjut.
-- Beban di gym ini kelipatan 2 kg.`;
+- Beban di gym ini kelipatan 2 kg.
+- Soal tidur, pakai HANYA bagian "tidur" dan "jam_gym" di DATA. Tulis jam persis seperti di data (format HH:MM, contoh 23:30), jangan menulis ulang jadi "jam 11 malam". Sebut jam tidur, jam bangun, durasi, dan jam gym. Nilai cukup/kurang dari field "status" dan durasi_jam dibanding target_jam; jangan bikin patokan sendiri.
+- Kalau tidur kurang (status "kurang" atau "agak_kurang"), kaitkan ke performa/energi hari itu dengan hati-hati: itu kemungkinan, bukan kepastian. Kalau tidur cukup tapi performa turun, jangan menyalahkan tidur.
+- "catatan_nata" adalah cerita Nata sendiri soal tidurnya; boleh dikutip singkat. Kalau dia cerita sering susah tidur, kasih satu saran tidur umum yang ringan (jam tidur konsisten, kurangi layar sebelum tidur), bukan saran medis.
+- Kalau tidur null, JANGAN menebak jam tidur atau durasinya.`;
 
 function formatKesimpulan(hari: string, k: KesimpulanData): string {
   return [
@@ -48,12 +55,25 @@ function formatKesimpulan(hari: string, k: KesimpulanData): string {
     "🍽️ Nutrisi",
     k.nutrisi,
     "",
+    "😴 Tidur & istirahat",
+    k.tidur,
+    "",
     "➡️ Besok",
     k.besok,
   ].join("\n");
 }
 
 const kg = (n: number) => String(n).replace(".", ",");
+
+/** Kalimat tidur murni dari data (dipakai di cadangan tanpa AI). */
+export function tidurCadangan(i: SummaryInput): string {
+  const t = i.tidur;
+  const gym = `Gym mulai ${i.jam_gym.mulai}${i.jam_gym.selesai ? `, selesai ${i.jam_gym.selesai}` : ""}.`;
+  if (!t) return `Tidur semalam belum dicatat. ${gym} Catat besok pagi ya (app atau /tidur 23:30 6:00) biar kelihatan istirahatmu cukup atau nggak.`;
+  const status = t.status === "cukup" ? "cukup" : t.status === "agak_kurang" ? "agak kurang" : "kurang";
+  const cerita = t.catatan_nata ? ` Katamu: “${t.catatan_nata}”.` : "";
+  return `Tidur ${t.jam_tidur} sampai bangun ${t.jam_bangun} (${t.durasi_teks}), ${status} dari target ${t.target_jam} jam. ${gym}${cerita}`;
+}
 
 /** Cadangan tanpa AI kalau panggilan gagal atau angkanya ketahuan mengarang. Murni dari data. */
 export function kesimpulanCadangan(i: SummaryInput): KesimpulanData {
@@ -77,6 +97,7 @@ export function kesimpulanCadangan(i: SummaryInput): KesimpulanData {
       n.jumlah_makan_tercatat === 0
         ? "Belum ada catatan makan hari ini."
         : `${n.kcal.toLocaleString("id-ID")} dari ${n.target_kcal.toLocaleString("id-ID")} kcal, protein ${n.protein_g} dari ${n.target_protein_g} g.`,
+    tidur: tidurCadangan(i),
     besok: i.besok.jenis === "latihan" ? `Besok ${i.besok.hari}: ${i.besok.nama_program ?? "latihan"}.` : `Besok ${i.besok.hari} istirahat. Berikutnya ${i.besok.nama_program ?? "latihan"}.`,
   };
 }
@@ -103,7 +124,7 @@ async function tanyaAi(input: SummaryInput, tambahan?: string): Promise<Kesimpul
 }
 
 function semuaTeks(k: KesimpulanData): string {
-  return [k.berubah, k.pertahankan, ...k.perbaiki, k.nutrisi, k.besok].join("\n");
+  return [k.berubah, k.pertahankan, ...k.perbaiki, k.nutrisi, k.tidur, k.besok].join("\n");
 }
 
 /** Buat kesimpulan: AI -> periksa angka -> (sekali ulang) -> cadangan tanpa AI. */

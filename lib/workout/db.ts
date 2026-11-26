@@ -1,5 +1,6 @@
 import { db, must } from "../supabase.ts";
-import { ubahDilewati } from "../program/lewati.ts";
+import { bacaDaftarGanti, type Ganti } from "../program/ganti.ts";
+import { hitungSet, ubahDilewati } from "../program/lewati.ts";
 import type { JenisHari, ProgramDay, SessionLite } from "../program/queue.ts";
 import { ramadanAktif, type OverrideRamadan } from "../ramadan/ramadan.ts";
 import { todayWIB } from "../time.ts";
@@ -11,6 +12,7 @@ export type ExerciseRow = {
   aliases: string[];
   muscle_group: string;
   kind: string;
+  equipment: string;
   increment_kg: number;
   is_bodyweight: boolean;
 };
@@ -73,7 +75,7 @@ export type PlanRow = {
   status: "disarankan" | "dikerjakan" | "dilewati";
 };
 
-const EXERCISE_COLS = "id,name,aliases,muscle_group,kind,increment_kg,is_bodyweight";
+const EXERCISE_COLS = "id,name,aliases,muscle_group,kind,equipment,increment_kg,is_bodyweight";
 const SESSION_COLS = "id,session_date,program_day_id,mode,status,energy,started_at,cardio_min";
 
 export async function loadExercises(): Promise<ExerciseRow[]> {
@@ -275,6 +277,43 @@ export async function setSkipped(sessionId: number, exerciseId: number, lewati: 
   if (!error) return { ok: true };
   const belumAda = /skipped_exercises/.test(error.message);
   return { ok: false, error: belumAda ? "Fitur lewati belum aktif. Jalankan file supabase/011_satu_jam_dan_lewati.sql di Supabase dulu." : "Gagal menyimpan, coba lagi." };
+}
+
+/** Penggantian gerakan di satu sesi. Kosong kalau kolomnya belum ada (SQL 012 belum dijalankan). */
+export async function getSwaps(sessionId: number): Promise<Ganti[]> {
+  const { data, error } = await db().from("workout_sessions").select("swaps").eq("id", sessionId).maybeSingle();
+  if (error) return [];
+  return bacaDaftarGanti((data as { swaps?: unknown } | null)?.swaps);
+}
+
+export async function saveSwaps(sessionId: number, daftar: Ganti[]): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await db().from("workout_sessions").update({ swaps: daftar }).eq("id", sessionId);
+  if (!error) return { ok: true };
+  const belumAda = /swaps/.test(error.message);
+  return { ok: false, error: belumAda ? "Fitur ganti gerakan belum aktif. Jalankan file supabase/012_ganti_gerakan.sql di Supabase dulu." : "Gagal menyimpan, coba lagi." };
+}
+
+/**
+ * Penggantian yang berlaku untuk menu hari program itu di tanggal itu (sesi terbaru), beserta
+ * jumlah set kerja per gerakan di sesi tersebut. Kosong kalau belum ada sesi atau belum ada penggantian.
+ */
+export async function swapsUntukMenu(tanggal: string, dayId: number): Promise<{ daftar: Ganti[]; selesai: Map<number, number> }> {
+  const kosong = { daftar: [] as Ganti[], selesai: new Map<number, number>() };
+  const { data, error } = await db()
+    .from("workout_sessions")
+    .select("id,swaps")
+    .eq("session_date", tanggal)
+    .eq("program_day_id", dayId)
+    .in("status", ["berjalan", "selesai"])
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return kosong;
+  const row = data as { id: number; swaps?: unknown };
+  const daftar = bacaDaftarGanti(row.swaps);
+  if (daftar.length === 0) return kosong;
+  const sets = await getSessionSets(row.id);
+  return { daftar, selesai: hitungSet(sets.filter((s) => !s.is_warmup).map((s) => s.exercise_id)) };
 }
 
 export async function logSets(args: {

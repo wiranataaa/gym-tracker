@@ -2,12 +2,13 @@ import { lajuBeratTerakhir } from "../body/db.ts";
 import { PANDUAN_DELOAD, setDeload } from "../program/deload.ts";
 import { rekomendasiKardio, type Kardio } from "../program/kardio.ts";
 import { kurangiVolumeRamadan, SARAN_LATIHAN_RAMADAN } from "../ramadan/ramadan.ts";
+import { terapkanGanti } from "../program/ganti.ts";
 import { computeTarget } from "../program/progression.ts";
 import { kindOf, pilihHariIni, type JenisHari, type ProgramDay } from "../program/queue.ts";
 import { shortModeExercises } from "../program/shortMode.ts";
-import type { Target } from "../program/types.ts";
+import type { ExerciseSession, Target } from "../program/types.ts";
 import { fmtInt, fmtKg, isoWeekday, namaHari } from "../time.ts";
-import { getHistory, getSettings, getTodayPlan, loadProgram, loadRecentSessions, type ExerciseRow, type Settings } from "./db.ts";
+import { getHistory, getSettings, getTodayPlan, loadExercises, loadProgram, loadRecentSessions, swapsUntukMenu, type ExerciseRow, type Settings } from "./db.ts";
 
 export type PlannedExercise = {
   exercise: ExerciseRow;
@@ -16,6 +17,8 @@ export type PlannedExercise = {
   repMin: number;
   repMax: number;
   target: Target;
+  /** terisi kalau gerakan ini pengganti (alat penuh) */
+  gantiDari: { id: number; name: string } | null;
 };
 
 export type TodayMenu = {
@@ -73,10 +76,34 @@ export async function buildMenu(today: string, mode: "normal" | "singkat", force
   let dayItems = items.filter((i) => i.dayId === day.id).sort((a, b) => a.position - b.position);
   if (mode === "singkat") dayItems = shortModeExercises(dayItems);
 
+  // Deload: volume ±60%. Ramadan: kurangi 1 set di gerakan non-inti yang >= 3 set. Keduanya tidak ditumpuk.
+  const dasar = dayItems.map((i) => ({
+    exerciseId: i.exercise.id,
+    gantiDari: null as number | null,
+    exercise: i.exercise,
+    position: i.position,
+    sets: settings.deload_aktif ? setDeload(i.sets) : settings.ramadan_aktif ? kurangiVolumeRamadan(i.sets, i.isCore) : i.sets,
+    repMin: i.repMin,
+    repMax: i.repMax,
+  }));
+
+  // Gerakan yang diganti di sesi hari ini (alat penuh). Pengganti mewarisi set dan rentang reps.
+  let rencana = dasar;
+  const { daftar, selesai } = await swapsUntukMenu(today, day.id);
+  if (daftar.length > 0) {
+    const semua = new Map((await loadExercises()).map((e) => [e.id, e]));
+    rencana = terapkanGanti(dasar, daftar, selesai, (asal, ke, sets) => {
+      const exercise = semua.get(ke);
+      return exercise ? { ...asal, exerciseId: ke, gantiDari: asal.exerciseId, exercise, sets } : null;
+    });
+  }
+
   const history = await getHistory(
-    dayItems.map((i) => i.exercise.id),
+    rencana.map((i) => i.exercise.id),
     today,
   );
+  const namaAsal = new Map<number, string>(dasar.map((i) => [i.exerciseId, i.exercise.name]));
+  for (const i of rencana) namaAsal.set(i.exerciseId, i.exercise.name);
   const recovery = isRecovery(day);
 
   return {
@@ -88,25 +115,21 @@ export async function buildMenu(today: string, mode: "normal" | "singkat", force
     ramadan: settings.ramadan_aktif,
     deload: settings.deload_aktif,
     kardio: rekomendasiKardio({ mode, recovery, lajuBeratKg: laju, ramadan: settings.ramadan_aktif }),
-    items: dayItems.map((i) => {
-      // Deload: volume ±60%. Ramadan: kurangi 1 set di gerakan non-inti yang >= 3 set. Keduanya tidak ditumpuk.
-      const sets = settings.deload_aktif ? setDeload(i.sets) : settings.ramadan_aktif ? kurangiVolumeRamadan(i.sets, i.isCore) : i.sets;
-      return {
-        exercise: i.exercise,
-        position: i.position,
-        sets,
-        repMin: i.repMin,
-        repMax: i.repMax,
-        target: computeTarget(
-          history.get(i.exercise.id) ?? [],
-          { sets, repMin: i.repMin, repMax: i.repMax },
-          i.exercise.increment_kg,
-          today,
-          { bodyweight: i.exercise.is_bodyweight },
-        ),
-      };
-    }),
+    items: rencana.map((i) => ({
+      exercise: i.exercise,
+      position: i.position,
+      sets: i.sets,
+      repMin: i.repMin,
+      repMax: i.repMax,
+      gantiDari: i.gantiDari == null ? null : { id: i.gantiDari, name: namaAsal.get(i.gantiDari) ?? "gerakan lain" },
+      target: targetGerakan(history.get(i.exercise.id) ?? [], i, i.exercise, today),
+    })),
   };
+}
+
+/** Target beban dan reps satu gerakan untuk skema set tertentu. */
+export function targetGerakan(riwayat: ExerciseSession[], skema: { sets: number; repMin: number; repMax: number }, exercise: ExerciseRow, today: string): Target {
+  return computeTarget(riwayat, { sets: skema.sets, repMin: skema.repMin, repMax: skema.repMax }, exercise.increment_kg, today, { bodyweight: exercise.is_bodyweight });
 }
 
 export function targetLine(p: PlannedExercise): string {

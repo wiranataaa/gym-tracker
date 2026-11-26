@@ -42,6 +42,8 @@ export type ExerciseView = {
   bodyweight: boolean;
   /** jenis gerakan, menentukan lama istirahat antar set */
   jenis: "compound" | "isolation";
+  /** terisi kalau gerakan ini pengganti (alat penuh) */
+  gantiDari: string | null;
 };
 
 export type LoggedSet = { id: number; exerciseId: number; weightKg: number; reps: number; rpe: number | null; isWarmup: boolean };
@@ -107,6 +109,7 @@ function toView(menu: TodayMenu): ExerciseView[] {
     stepKg: roundingStep(p.exercise.increment_kg),
     bodyweight: p.exercise.is_bodyweight,
     jenis: p.exercise.kind === "isolation" ? "isolation" : "compound",
+    gantiDari: p.gantiDari?.name ?? null,
   }));
 }
 

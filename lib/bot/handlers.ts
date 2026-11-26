@@ -23,6 +23,7 @@ import {
 } from "../workout/db.ts";
 import { buildMenu, formatMenu, getSettings, isWorkoutDay, targetLine, type TodayMenu } from "../workout/menu.ts";
 import { pratinjauBerikutnya } from "../workout/berikutnya.ts";
+import { ambilCalon, batalkanGanti, lakukanGanti } from "../workout/ganti.ts";
 import { gerakanBeres, gerakanSekarang, hitungSet, teksDilewati } from "../program/lewati.ts";
 import { bannerTimbang } from "../workout/today.ts";
 import { callbackSuplemen, catatKardio, pilihMenu, showGantiMenu, tampilSuplemen } from "./menuSuplemen.ts";
@@ -53,6 +54,7 @@ const HELP = [
   "/skip — lewati latihan hari ini (antrean nggak maju)",
   "/selesai — tutup sesi",
   "/lewati — udah nggak kuat atau alatnya penuh: lewati sisa set gerakan yang lagi dikerjain",
+  "/ganti — alatnya penuh: ganti gerakan yang lagi dikerjain (cuma sesi ini)",
   "/besok — intip menu latihan berikutnya",
   "/timbang 71.4 gym — catat berat badan (tambah 'gym' kalau timbang di gym sebelum latihan, 'pagi' kalau habis bangun & belum makan)",
   "/menu — ganti menu hari ini (utama A/B/C atau bonus D/E/F buat variasi)",
@@ -88,7 +90,10 @@ const DURING_BUTTONS: Keyboard = [
     { text: "➡️ Gerakan berikutnya", data: "next" },
     { text: "🏁 Selesai", data: "selesai" },
   ],
-  [{ text: "⏭️ Lewati sisa set", data: "lewati" }],
+  [
+    { text: "🔁 Ganti gerakan", data: "gg" },
+    { text: "⏭️ Lewati sisa set", data: "lewati" },
+  ],
 ];
 
 // ---------- Util ----------
@@ -314,6 +319,59 @@ async function lewatiSekarang(ctx: Ctx, today: string): Promise<void> {
   const lanjut = gerakanSekarang(rencana, kerja, [...skipped, sekarang.exerciseId]);
   lines.push(lanjut ? `Berikutnya: ${lanjut.item.exercise.name} — ${targetLine(lanjut.item)}` : "Semua gerakan beres. Ketik /selesai kalau udah.");
   await ctx.send(lines.join("\n"), [[{ text: "↩️ Batalin lewati", data: `balik:${sekarang.exerciseId}` }], ...DURING_BUTTONS.slice(0, 1)]);
+}
+
+/** Tawarkan pengganti untuk gerakan yang sedang dikerjakan (alatnya penuh). */
+async function tawarkanGanti(ctx: Ctx, today: string): Promise<void> {
+  const open = await getOpenSession(today);
+  if (!open) {
+    await ctx.send("Belum ada sesi yang jalan. Ketik /mulai dulu, baru bisa ganti gerakan.");
+    return;
+  }
+  const menu = await buildMenu(today, open.mode, open.program_day_id);
+  if (!menu) return;
+  const [sets, skipped] = await Promise.all([getSessionSets(open.id), getSkipped(open.id)]);
+  const kerja = sets.filter((s) => !s.is_warmup).map((s) => s.exercise_id);
+  const sekarang = gerakanSekarang(
+    menu.items.map((p) => ({ exerciseId: p.exercise.id, sets: p.sets })),
+    kerja,
+    skipped,
+  );
+  if (!sekarang) {
+    await ctx.send("Semua gerakan udah beres, nggak ada yang perlu diganti. Ketik /selesai.", [[{ text: "🏁 Selesai", data: "selesai" }]]);
+    return;
+  }
+  const r = await ambilCalon(today, sekarang.exerciseId);
+  if (!r.ok) {
+    await ctx.send(r.error);
+    return;
+  }
+  if (r.calon.length === 0) {
+    await ctx.send(`Belum ada pengganti buat ${r.nama}. Kalau alatnya penuh terus, pakai /lewati.`, DURING_BUTTONS);
+    return;
+  }
+  const lines = [`🔁 Ganti ${r.nama} pakai apa? (cuma buat sesi ini)`, ""];
+  r.calon.forEach((c, i) => lines.push(`${i + 1}. ${c.name} — ${c.alat}`, `   ${c.target}`));
+  const tombol: Keyboard = r.calon.map((c, i) => [{ text: `${i + 1}. ${c.name}`, data: `gt:${sekarang.exerciseId}:${c.id}` }]);
+  tombol.push([{ text: "❌ Nggak jadi", data: "gt:x" }]);
+  await ctx.send(lines.join("\n"), tombol);
+}
+
+async function pilihPengganti(ctx: Ctx, today: string, dari: number, ke: number): Promise<void> {
+  const r = await lakukanGanti(today, dari, ke);
+  if (!r.ok) {
+    await ctx.send(r.error);
+    return;
+  }
+  await ctx.send(`🔁 ${r.dari} diganti ${r.ke.name}.\n${r.ke.target}\nCatat setnya kayak biasa.`, [
+    [{ text: "↩️ Balikin", data: `gtb:${ke}` }],
+    ...DURING_BUTTONS,
+  ]);
+}
+
+async function balikPengganti(ctx: Ctx, today: string, ke: number): Promise<void> {
+  const r = await batalkanGanti(today, ke);
+  await ctx.send(r.ok ? "↩️ Dibalikin ke gerakan awal." : r.error, DURING_BUTTONS);
 }
 
 async function batalLewati(ctx: Ctx, today: string, exerciseId: number): Promise<void> {
@@ -561,6 +619,12 @@ export async function handleBotInput(input: BotUpdate, ctx: Ctx): Promise<void> 
     if (await callbackSuplemen(ctx, today, data)) return;
     if (data === "next") return showNext(ctx, today);
     if (data === "lewati") return lewatiSekarang(ctx, today);
+    if (data === "gg") return tawarkanGanti(ctx, today);
+    if (data === "gt:x") return ctx.send("Oke, nggak jadi diganti.", DURING_BUTTONS);
+    const gt = data.match(/^gt:(\d+):(\d+)$/);
+    if (gt) return pilihPengganti(ctx, today, Number(gt[1]), Number(gt[2]));
+    const gtb = data.match(/^gtb:(\d+)$/);
+    if (gtb) return balikPengganti(ctx, today, Number(gtb[1]));
     if (data === "besok") return tampilBerikutnya(ctx, today);
     const balik = data.match(/^balik:(\d+)$/);
     if (balik) return batalLewati(ctx, today, Number(balik[1]));
@@ -594,6 +658,8 @@ export async function handleBotInput(input: BotUpdate, ctx: Ctx): Promise<void> 
         return askEnergy(ctx, today);
       case "/lewati":
         return lewatiSekarang(ctx, today);
+      case "/ganti":
+        return tawarkanGanti(ctx, today);
       case "/besok":
         return tampilBerikutnya(ctx, today);
       case "/timbang":

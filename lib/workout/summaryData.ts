@@ -6,7 +6,7 @@ import { db, must } from "../supabase.ts";
 import { getTidur, listTidur } from "../tidur/db.ts";
 import { fmtDurasi, jamDesimal, jamWIB, nilaiTidur, rataMenit, TARGET_TIDUR_JAM } from "../tidur/hitung.ts";
 import { addDays, isoWeekday, namaHari } from "../time.ts";
-import { getHistory, getSettings, getSkipped, loadExercises, loadProgram, loadRecentSessions } from "./db.ts";
+import { getHistory, getSettings, getSkipped, getSwaps, loadExercises, loadProgram, loadRecentSessions } from "./db.ts";
 import { getSessionDetail } from "./history.ts";
 
 // Semua angka untuk kesimpulan dihitung di sini (kode). AI cuma menerima hasilnya.
@@ -34,6 +34,8 @@ export type SummaryInput = {
   volume_per_otot_kg: { otot: string; kg: number; sesi_sebelumnya_kg: number | null }[];
   /** gerakan yang sisa setnya sengaja dilewati di sesi ini (alasannya nggak dicatat) */
   gerakan_dilewati: { nama: string; set_dikerjakan: number }[];
+  /** gerakan yang diganti di sesi ini (biasanya karena alatnya penuh) */
+  gerakan_diganti: { dari: string; ke: string }[];
   nutrisi_hari_ini: {
     kcal: number;
     target_kcal: number;
@@ -169,6 +171,9 @@ export async function buildSummaryInput(sessionId: number): Promise<SummaryInput
     set_dikerjakan: kerja.find((e) => e.exerciseId === id)?.sets.length ?? 0,
   }));
 
+  const namaGerakan = (id: number) => exercises.find((e) => e.id === id)?.name ?? "Gerakan";
+  const diganti = (await getSwaps(sessionId)).map((g) => ({ dari: namaGerakan(g.dari), ke: namaGerakan(g.ke) }));
+
   const besokTanggal = addDays(detail.date, 1);
   const berikutnya = nextProgramDay(days, sessions);
   const besokLatihan = settings.workout_days.includes(isoWeekday(besokTanggal));
@@ -183,6 +188,7 @@ export async function buildSummaryInput(sessionId: number): Promise<SummaryInput
     total_volume_kg: r0(todaySets.reduce((a, s) => a + s.weightKg * s.reps, 0)),
     gerakan,
     gerakan_dilewati: dilewati,
+    gerakan_diganti: diganti,
     volume_per_otot_kg: [...volNow.entries()]
       .sort((a, b) => b[1] - a[1])
       .map(([otot, kg]) => ({ otot, kg: r0(kg), sesi_sebelumnya_kg: volPrev.has(otot) ? r0(volPrev.get(otot)!) : null })),

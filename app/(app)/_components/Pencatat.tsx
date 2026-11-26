@@ -3,10 +3,11 @@
 import { useMemo, useState, useTransition } from "react";
 import { fmtKg } from "@/lib/time.ts";
 import type { ExerciseView, LoggedSet, TodayView } from "@/lib/workout/today.ts";
-import { hapusSet, lewatiGerakan, selesaiLatihan, simpanSet } from "../actions.ts";
+import { batalGantiApp, hapusSet, lewatiGerakan, selesaiLatihan, simpanSet } from "../actions.ts";
 import { totalSet } from "@/lib/program/lewati.ts";
 import { istirahatDetik } from "@/lib/workout/istirahat.ts";
 import { KartuKardio } from "./KartuKardio.tsx";
+import { PanelGanti } from "./PanelGanti.tsx";
 import { Stepper } from "./Stepper.tsx";
 import { SakelarTimer } from "./TimerIstirahat.tsx";
 import { bacaSakelarMentah, bukaAudio, hentikanTimer, mulaiTimer, timerNyala } from "./timerStore.ts";
@@ -134,6 +135,7 @@ export function Pencatat({ view }: { view: Berjalan }) {
             <button onClick={() => setOpenId(open ? null : e.exerciseId)} className="flex w-full items-start justify-between gap-3 p-4 text-left">
               <div className="min-w-0">
                 <p className="font-medium leading-tight">{e.name}</p>
+                {e.gantiDari && <p className="mt-0.5 text-xs text-sky-300">🔁 pengganti {e.gantiDari}</p>}
                 <p className="mt-0.5 text-sm text-slate-300">
                   {e.sets} × {e.repMin}-{e.repMax}
                   {e.targetWeightKg != null && (
@@ -233,6 +235,18 @@ export function Pencatat({ view }: { view: Berjalan }) {
                 >
                   {pending ? "Menyimpan…" : `Simpan set ${warmup[e.exerciseId] ? "pemanasan" : n + 1}`}
                 </button>
+
+                {!penuh && !dilewati && <PanelGanti key={`ganti-${e.exerciseId}`} exerciseId={e.exerciseId} onGanti={(keId) => setOpenId(keId)} />}
+
+                {e.gantiDari && n === 0 && (
+                  <button
+                    disabled={pending}
+                    onClick={() => jalan(() => batalGantiApp(e.exerciseId))}
+                    className="w-full rounded-xl bg-white/5 px-4 py-3 text-sm text-slate-300 active:bg-white/15 disabled:opacity-60"
+                  >
+                    ↩️ Balikin ke {e.gantiDari}
+                  </button>
+                )}
 
                 {!penuh &&
                   (dilewati ? (

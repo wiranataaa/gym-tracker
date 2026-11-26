@@ -20,6 +20,7 @@ import {
   setSkipped,
   startSession,
 } from "@/lib/workout/db.ts";
+import { ambilCalon, batalkanGanti, lakukanGanti, type Calon } from "@/lib/workout/ganti.ts";
 import { buildMenu } from "@/lib/workout/menu.ts";
 
 // Setiap aksi WAJIB cek login dulu: Server Action bisa dipanggil langsung lewat POST.
@@ -126,6 +127,30 @@ export async function lewatiGerakan(exerciseId: number, lewati: boolean): Promis
   const open = await getOpenSession(todayWIB());
   if (!open) return { ok: false, error: "Nggak ada sesi yang jalan" };
   const r = await setSkipped(open.id, exerciseId, !!lewati);
+  if (r.ok) refresh();
+  return r;
+}
+
+/** Pilihan pengganti untuk satu gerakan (alat penuh). */
+export async function calonGantiApp(exerciseId: number): Promise<{ ok: true; calon: Calon[] } | { ok: false; error: string }> {
+  await requireOwner();
+  if (!Number.isInteger(exerciseId) || exerciseId <= 0) return { ok: false, error: "Gerakan nggak valid" };
+  return ambilCalon(todayWIB(), exerciseId);
+}
+
+export async function gantiGerakanApp(dariId: number, keId: number): Promise<Result> {
+  await requireOwner();
+  if (![dariId, keId].every((n) => Number.isInteger(n) && n > 0)) return { ok: false, error: "Gerakan nggak valid" };
+  const r = await lakukanGanti(todayWIB(), dariId, keId);
+  if (!r.ok) return r;
+  refresh();
+  return { ok: true };
+}
+
+export async function batalGantiApp(keId: number): Promise<Result> {
+  await requireOwner();
+  if (!Number.isInteger(keId) || keId <= 0) return { ok: false, error: "Gerakan nggak valid" };
+  const r = await batalkanGanti(todayWIB(), keId);
   if (r.ok) refresh();
   return r;
 }

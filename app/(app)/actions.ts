@@ -17,6 +17,7 @@ import {
   logSets,
   saveCardio,
   savePlan,
+  setSkipped,
   startSession,
 } from "@/lib/workout/db.ts";
 import { buildMenu } from "@/lib/workout/menu.ts";
@@ -116,6 +117,17 @@ export async function pilihMenuHariIni(dayId: number): Promise<Result> {
   await savePlan(today, { program_day_id: dayId, status: "disarankan" });
   refresh();
   return { ok: true };
+}
+
+/** Lewati sisa set satu gerakan di sesi yang berjalan (atau batalkan). */
+export async function lewatiGerakan(exerciseId: number, lewati: boolean): Promise<Result> {
+  await requireOwner();
+  if (!Number.isInteger(exerciseId) || exerciseId <= 0) return { ok: false, error: "Gerakan nggak valid" };
+  const open = await getOpenSession(todayWIB());
+  if (!open) return { ok: false, error: "Nggak ada sesi yang jalan" };
+  const r = await setSkipped(open.id, exerciseId, !!lewati);
+  if (r.ok) refresh();
+  return r;
 }
 
 /** Catat menit kardio (jalan di treadmill) di sesi yang sedang berjalan. 0 = kosongkan. */

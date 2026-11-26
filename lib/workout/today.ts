@@ -3,9 +3,10 @@ import { statusTimbang } from "../body/db.ts";
 import { pengingatTimbang } from "../bot/pengingat.ts";
 import type { Kardio } from "../program/kardio.ts";
 import { roundingStep } from "../program/progression.ts";
-import { pilihHariIni } from "../program/queue.ts";
+import { hitungSet, teksDilewati } from "../program/lewati.ts";
 import { awalMinggu } from "../report/hitung.ts";
 import { isoWeekday } from "../time.ts";
+import { pratinjauBerikutnya, type Pratinjau } from "./berikutnya.ts";
 import {
   closeStaleSessions,
   getFinishedSession,
@@ -13,14 +14,16 @@ import {
   getOpenSession,
   getSessionSets,
   getSettings,
+  getSkipped,
   getTodayPlan,
+  loadExercises,
   loadProgram,
   loadRecentSessions,
   type SessionRow,
   type SetRow,
   type Settings,
 } from "./db.ts";
-import { buildMenu, SESI_UTAMA_PER_MINGGU, type TodayMenu } from "./menu.ts";
+import { buildMenu, type TodayMenu } from "./menu.ts";
 
 // Data yang dibutuhkan halaman "Hari ini" di app. Semua angka dari kode, bukan AI.
 
@@ -52,13 +55,14 @@ export type Recap = {
   totalSets: number;
   volumeKg: number;
   exercises: { name: string; sets: number; bestWeightKg: number; bestReps: number; prevText: string | null }[];
-  nextDayName: string | null;
+  /** teks siap tampil untuk gerakan yang dilewati sisa setnya */
+  dilewati: string[];
 };
 
 export type TodayView =
   | { kind: "tanpa_program" }
-  | { kind: "istirahat"; dayName: string }
-  | { kind: "skip" }
+  | { kind: "istirahat"; dayName: string; berikutnya: Pratinjau | null }
+  | { kind: "skip"; berikutnya: Pratinjau | null }
   | {
       kind: "siap";
       dayId: number;
@@ -82,11 +86,13 @@ export type TodayView =
       sessionId: number;
       exercises: ExerciseView[];
       logged: LoggedSet[];
+      /** id gerakan yang sisa setnya dilewati */
+      skipped: number[];
       kardio: Kardio;
       cardioMin: number | null;
       timbang: string | null;
     }
-  | { kind: "selesai"; recap: Recap; kesimpulan: string | null; timbang: string | null };
+  | { kind: "selesai"; recap: Recap; kesimpulan: string | null; timbang: string | null; berikutnya: Pratinjau | null };
 
 function toView(menu: TodayMenu): ExerciseView[] {
   return menu.items.map((p) => ({
@@ -130,9 +136,19 @@ export async function bannerTimbang(today: string, settings: Settings): Promise<
 }
 
 async function buildRecap(session: SessionRow, today: string): Promise<Recap> {
-  const [rows, { days, items }, sessions] = await Promise.all([getSessionSets(session.id), loadProgram(), loadRecentSessions()]);
+  const [rows, { days }, daftar, skipped] = await Promise.all([getSessionSets(session.id), loadProgram(), loadExercises(), getSkipped(session.id)]);
   const working = rows.filter((r) => !r.is_warmup);
-  const names = new Map(items.map((i) => [i.exercise.id, i.exercise.name]));
+  // Nama dari daftar semua gerakan, bukan dari program: gerakan yang sudah dikeluarkan dari program tetap bernama
+  const names = new Map(daftar.map((e) => [e.id, e.name]));
+
+  let dilewati: string[] = [];
+  if (skipped.length > 0) {
+    const menu = await buildMenu(today, session.mode, session.program_day_id);
+    const selesai = hitungSet(working.map((r) => r.exercise_id));
+    dilewati = skipped.map((id) =>
+      teksDilewati(names.get(id) ?? "Gerakan", selesai.get(id) ?? 0, menu?.items.find((p) => p.exercise.id === id)?.sets ?? null),
+    );
+  }
 
   const ids = [...new Set(working.map((r) => r.exercise_id))];
   const history = await getHistory(ids, today);
@@ -158,7 +174,7 @@ async function buildRecap(session: SessionRow, today: string): Promise<Recap> {
     totalSets: working.length,
     volumeKg: working.reduce((a, r) => a + r.weight_kg * r.reps, 0),
     exercises,
-    nextDayName: pilihHariIni(days, sessions, today, SESI_UTAMA_PER_MINGGU)?.day.name ?? null,
+    dilewati,
   };
 }
 
@@ -169,10 +185,11 @@ export async function loadTodayView(today: string, force: boolean): Promise<Toda
   const [settings, plan, open] = await Promise.all([getSettings(), getTodayPlan(today), getOpenSession(today)]);
 
   if (open) {
-    const [menu, rows, timbang] = await Promise.all([
+    const [menu, rows, timbang, skipped] = await Promise.all([
       buildMenu(today, open.mode, open.program_day_id),
       getSessionSets(open.id),
       bannerTimbang(today, settings),
+      getSkipped(open.id),
     ]);
     if (!menu) return { kind: "tanpa_program" };
     return {
@@ -183,6 +200,7 @@ export async function loadTodayView(today: string, force: boolean): Promise<Toda
       sessionId: open.id,
       exercises: toView(menu),
       logged: toLogged(rows),
+      skipped,
       kardio: menu.kardio,
       cardioMin: open.cardio_min,
       timbang,
@@ -191,17 +209,22 @@ export async function loadTodayView(today: string, force: boolean): Promise<Toda
 
   const finished = await getFinishedSession(today);
   if (finished) {
-    const [recap, kesimpulan, timbang] = await Promise.all([buildRecap(finished, today), ambilKesimpulan(today), bannerTimbang(today, settings)]);
-    return { kind: "selesai", recap, kesimpulan, timbang };
+    const [recap, kesimpulan, timbang, berikutnya] = await Promise.all([
+      buildRecap(finished, today),
+      ambilKesimpulan(today),
+      bannerTimbang(today, settings),
+      pratinjauBerikutnya(today, settings),
+    ]);
+    return { kind: "selesai", recap, kesimpulan, timbang, berikutnya };
   }
 
-  if (plan?.status === "dilewati") return { kind: "skip" };
+  if (plan?.status === "dilewati") return { kind: "skip", berikutnya: await pratinjauBerikutnya(today, settings) };
 
   const [menu, timbang] = await Promise.all([buildMenu(today, plan?.mode ?? "normal"), bannerTimbang(today, settings)]);
   if (!menu) return { kind: "tanpa_program" };
 
   if (!force && !settings.workout_days.includes(isoWeekday(today))) {
-    return { kind: "istirahat", dayName: menu.day.name };
+    return { kind: "istirahat", dayName: menu.day.name, berikutnya: await pratinjauBerikutnya(today, settings) };
   }
 
   return {

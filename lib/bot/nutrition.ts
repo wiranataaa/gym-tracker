@@ -1,5 +1,5 @@
 import { estimateFromPhoto, estimateFromText, type EstimasiData, type EstimateResult, type ImageType } from "../ai/nutrition.ts";
-import { labelFaktor, persen, PORTION_FACTORS, sisa } from "../nutrition/calc.ts";
+import { labelPorsi, PENJELASAN_PORSI, persen, PORTION_FACTORS, sisa } from "../nutrition/calc.ts";
 import {
   addFavoriteFromMeal,
   createDraft,
@@ -45,19 +45,20 @@ function formatMeal(meal: Meal, progress?: string, pertanyaan?: string): string 
   const range = meal.kcalMin != null && meal.kcalMax != null ? ` (kisaran ${fmtInt(meal.kcalMin)}–${fmtInt(meal.kcalMax)})` : "";
   lines.push(`Total: ${fmtInt(meal.kcal)} kcal${range}`);
   lines.push(`Protein ${fmtKg(meal.proteinG)} g · Karbo ${fmtKg(meal.carbsG)} g · Lemak ${fmtKg(meal.fatG)} g`);
-  lines.push(`Porsi ${labelFaktor(meal.factor)}x${meal.confidence ? ` · keyakinan ${KONFIDENSI[meal.confidence]}` : ""}`);
+  lines.push(`Porsi dipakai: ${labelPorsi(meal.factor)}${meal.confidence ? ` · keyakinan ${KONFIDENSI[meal.confidence]}` : ""}`);
   if (pertanyaan) lines.push(`❓ ${pertanyaan}`);
   if (meal.source !== "favorit") lines.push("ℹ️ Estimasi AI bisa meleset ±20–30%. Yang penting konsisten.");
   if (progress) {
     lines.push("");
     lines.push(progress);
   }
+  lines.push("", `👇 ${PENJELASAN_PORSI}`);
   return lines.join("\n");
 }
 
 function mealKeyboard(meal: Meal): Keyboard {
   const porsi = PORTION_FACTORS.map((f) => ({
-    text: `${meal.factor === f ? "• " : ""}${labelFaktor(f)}x`,
+    text: `${meal.factor === f ? "• " : ""}${labelPorsi(f)}`,
     data: `mk:p:${meal.id}:${f}`,
   }));
   const rows: Keyboard = [];

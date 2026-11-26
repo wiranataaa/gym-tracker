@@ -9,6 +9,7 @@ import { loadTodayView } from "@/lib/workout/today.ts";
 import { PanelTidur, type RiwayatTidurView, type TidurView } from "./_components/PanelTidur.tsx";
 import { BannerTimbang } from "./_components/BannerTimbang.tsx";
 import { GantiMenu } from "./_components/GantiMenu.tsx";
+import { KartuBerikutnya } from "./_components/KartuBerikutnya.tsx";
 import { KartuMinggu } from "./_components/KartuMinggu.tsx";
 import { KesimpulanAI } from "./_components/KesimpulanAI.tsx";
 import { PanelMulai } from "./_components/PanelMulai.tsx";
@@ -94,6 +95,8 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
 
       {view.kind === "skip" && <PanelSkip />}
 
+      {(view.kind === "istirahat" || view.kind === "skip") && view.berikutnya && <KartuBerikutnya data={view.berikutnya} />}
+
       {view.kind === "siap" && (
         <>
           <BannerTimbang teks={view.timbang} />
@@ -123,6 +126,8 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
             </p>
           </Kartu>
 
+          {view.berikutnya && <KartuBerikutnya data={view.berikutnya} />}
+
           <BannerTimbang teks={view.timbang} />
 
           <KesimpulanAI teks={view.kesimpulan} />
@@ -137,8 +142,15 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
             </Kartu>
           ))}
 
-          {view.recap.nextDayName && (
-            <p className="px-1 text-sm text-slate-400">Berikutnya di antrean: {view.recap.nextDayName}</p>
+          {view.recap.dilewati.length > 0 && (
+            <Kartu>
+              <p className="text-sm font-medium text-amber-200">⏭️ Dilewati</p>
+              <ul className="mt-1 space-y-0.5 text-sm text-slate-300">
+                {view.recap.dilewati.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+              </ul>
+            </Kartu>
           )}
         </div>
       )}

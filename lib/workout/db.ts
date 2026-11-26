@@ -1,4 +1,5 @@
 import { db, must } from "../supabase.ts";
+import { ubahDilewati } from "../program/lewati.ts";
 import type { JenisHari, ProgramDay, SessionLite } from "../program/queue.ts";
 import { ramadanAktif, type OverrideRamadan } from "../ramadan/ramadan.ts";
 import { todayWIB } from "../time.ts";
@@ -260,6 +261,22 @@ export async function getSessionSets(sessionId: number): Promise<SetRow[]> {
   );
 }
 
+/** Gerakan yang sisa setnya dilewati di sesi ini. Kosong kalau kolomnya belum ada (SQL 011 belum dijalankan). */
+export async function getSkipped(sessionId: number): Promise<number[]> {
+  const { data, error } = await db().from("workout_sessions").select("skipped_exercises").eq("id", sessionId).maybeSingle();
+  const list = (data as { skipped_exercises?: unknown } | null)?.skipped_exercises;
+  if (error || !Array.isArray(list)) return [];
+  return list.filter((x): x is number => Number.isInteger(x));
+}
+
+export async function setSkipped(sessionId: number, exerciseId: number, lewati: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
+  const baru = ubahDilewati(await getSkipped(sessionId), exerciseId, lewati);
+  const { error } = await db().from("workout_sessions").update({ skipped_exercises: baru }).eq("id", sessionId);
+  if (!error) return { ok: true };
+  const belumAda = /skipped_exercises/.test(error.message);
+  return { ok: false, error: belumAda ? "Fitur lewati belum aktif. Jalankan file supabase/011_satu_jam_dan_lewati.sql di Supabase dulu." : "Gagal menyimpan, coba lagi." };
+}
+
 export async function logSets(args: {
   sessionId: number;
   exerciseId: number;
@@ -268,6 +285,8 @@ export async function logSets(args: {
   rpe: number | null;
   isWarmup: boolean;
 }): Promise<void> {
+  // Ternyata masih lanjut gerakan yang tadi dilewati: batalkan status lewatinya
+  if (!args.isWarmup && (await getSkipped(args.sessionId)).includes(args.exerciseId)) await setSkipped(args.sessionId, args.exerciseId, false);
   const existing = must(
     await db()
       .from("workout_sets")

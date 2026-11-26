@@ -57,3 +57,12 @@ export function labelFaktor(f: number): string {
   if (f === 1.5) return "1½";
   return String(f).replace(".", ",");
 }
+
+/** Label tombol porsi: seberapa banyak yang dimakan DIBANDING perkiraan yang tampil. */
+export function labelPorsi(f: number): string {
+  if (f === 0.5) return "Separuh";
+  if (f === 1) return "Pas";
+  return `${labelFaktor(f)}×`;
+}
+
+export const PENJELASAN_PORSI = "Porsi yang lo makan dibanding perkiraan: Separuh = cuma makan ½, Pas = sesuai perkiraan, 1½× atau 2× = lebih banyak. Angkanya ikut berubah.";

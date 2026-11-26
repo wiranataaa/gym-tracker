@@ -23,6 +23,24 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* iPhone: pemilih jam/tanggal punya lebar bawaan sendiri dan bisa menabrak kolom sebelah.
+   Matikan gaya bawaannya supaya ikut lebar kolom (pemilih jam HP tetap muncul saat di-tap). */
+input[type="time"],
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 3rem;
+}
+input[type="time"]::-webkit-date-and-time-value,
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  min-height: 1.5em;
+}
+
 /* Hilangkan panah kecil di input angka; kita pakai tombol +/- sendiri */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {

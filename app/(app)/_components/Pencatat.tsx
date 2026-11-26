@@ -3,7 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { fmtKg } from "@/lib/time.ts";
 import type { ExerciseView, LoggedSet, TodayView } from "@/lib/workout/today.ts";
-import { hapusSet, selesaiLatihan, simpanSet } from "../actions.ts";
+import { hapusSet, lewatiGerakan, selesaiLatihan, simpanSet } from "../actions.ts";
+import { totalSet } from "@/lib/program/lewati.ts";
 import { istirahatDetik } from "@/lib/workout/istirahat.ts";
 import { KartuKardio } from "./KartuKardio.tsx";
 import { Stepper } from "./Stepper.tsx";
@@ -37,11 +38,22 @@ export function Pencatat({ view }: { view: Berjalan }) {
   }, [view.logged]);
 
   const doneCount = (e: ExerciseView) => (workingBy.get(e.exerciseId) ?? []).filter((s) => !s.isWarmup).length;
-  const firstOpen = view.exercises.find((e) => doneCount(e) < e.sets)?.exerciseId ?? view.exercises[0]?.exerciseId ?? null;
+  const beres = (e: ExerciseView) => view.skipped.includes(e.exerciseId) || doneCount(e) >= e.sets;
+  const firstOpen = view.exercises.find((e) => !beres(e))?.exerciseId ?? view.exercises[0]?.exerciseId ?? null;
   const [openId, setOpenId] = useState<number | null>(firstOpen);
 
-  const totalPlanned = view.exercises.reduce((a, e) => a + e.sets, 0);
-  const totalDone = view.exercises.reduce((a, e) => a + Math.min(doneCount(e), e.sets), 0);
+  // Set yang dilewati keluar dari hitungan rencana
+  const { rencana: totalPlanned, beres: totalDone } = totalSet(
+    view.exercises,
+    new Map(view.exercises.map((e) => [e.exerciseId, doneCount(e)])),
+    view.skipped,
+  );
+
+  function bukaBerikutnya(e: ExerciseView) {
+    const idx = view.exercises.findIndex((x) => x.exerciseId === e.exerciseId);
+    const next = view.exercises.slice(idx + 1).find((x) => !beres(x)) ?? view.exercises.slice(0, idx).find((x) => !beres(x));
+    if (next) setOpenId(next.exerciseId);
+  }
 
   function draftFor(e: ExerciseView): Draft {
     const d = drafts[e.exerciseId];
@@ -84,11 +96,7 @@ export function Pencatat({ view }: { view: Berjalan }) {
         // Simpan nilai terakhir sebagai default set berikutnya; pindah ke gerakan berikut kalau set penuh
         setDrafts((prev) => ({ ...prev, [e.exerciseId]: d }));
         setRpe((prev) => ({ ...prev, [e.exerciseId]: null }));
-        if (!isWarmup && doneCount(e) + 1 >= e.sets) {
-          const idx = view.exercises.findIndex((x) => x.exerciseId === e.exerciseId);
-          const next = view.exercises.slice(idx + 1).find((x) => doneCount(x) < x.sets);
-          if (next) setOpenId(next.exerciseId);
-        }
+        if (!isWarmup && doneCount(e) + 1 >= e.sets) bukaBerikutnya(e);
       },
     );
   }
@@ -116,6 +124,7 @@ export function Pencatat({ view }: { view: Berjalan }) {
         const open = openId === e.exerciseId;
         const d = draftFor(e);
         const penuh = n >= e.sets;
+        const dilewati = !penuh && view.skipped.includes(e.exerciseId);
 
         return (
           <section
@@ -135,8 +144,10 @@ export function Pencatat({ view }: { view: Berjalan }) {
                   )}
                 </p>
               </div>
-              <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs ${penuh ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-slate-300"}`}>
-                {penuh ? "✓ " : ""}
+              <span
+                className={`shrink-0 rounded-full px-2.5 py-1 text-xs ${penuh ? "bg-emerald-500/20 text-emerald-200" : dilewati ? "bg-amber-500/20 text-amber-200" : "bg-white/10 text-slate-300"}`}
+              >
+                {penuh ? "✓ " : dilewati ? "⏭ " : ""}
                 {Math.min(n, e.sets)}/{e.sets}
               </span>
             </button>
@@ -222,6 +233,25 @@ export function Pencatat({ view }: { view: Berjalan }) {
                 >
                   {pending ? "Menyimpan…" : `Simpan set ${warmup[e.exerciseId] ? "pemanasan" : n + 1}`}
                 </button>
+
+                {!penuh &&
+                  (dilewati ? (
+                    <button
+                      disabled={pending}
+                      onClick={() => jalan(() => lewatiGerakan(e.exerciseId, false))}
+                      className="w-full rounded-xl bg-amber-500/15 px-4 py-3 text-sm text-amber-100 disabled:opacity-60"
+                    >
+                      ↩️ Sisa set dilewati. Tap buat batalin
+                    </button>
+                  ) : (
+                    <button
+                      disabled={pending}
+                      onClick={() => jalan(() => lewatiGerakan(e.exerciseId, true), () => bukaBerikutnya(e))}
+                      className="w-full rounded-xl bg-white/5 px-4 py-3 text-sm text-slate-300 active:bg-white/15 disabled:opacity-60"
+                    >
+                      {n === 0 ? "⏭️ Lewati gerakan ini" : `😮‍💨 Udah nggak kuat, lewati sisa ${e.sets - n} set`}
+                    </button>
+                  ))}
               </div>
             )}
           </section>

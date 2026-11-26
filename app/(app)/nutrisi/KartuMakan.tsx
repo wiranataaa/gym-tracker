@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { labelFaktor, PORTION_FACTORS } from "@/lib/nutrition/calc.ts";
+import { labelPorsi, PENJELASAN_PORSI, PORTION_FACTORS } from "@/lib/nutrition/calc.ts";
 import { fmtInt, fmtKg } from "@/lib/time.ts";
 import { hapusMakan, jadikanFavorit, simpanMakan, ubahPorsi } from "./actions.ts";
 
@@ -86,7 +86,7 @@ export function KartuMakan({ m }: { m: MakanView }) {
           </p>
 
           <div>
-            <p className="mb-1.5 text-xs text-slate-400">Porsi</p>
+            <p className="mb-1.5 text-xs text-slate-400">{PENJELASAN_PORSI}</p>
             <div className="grid grid-cols-4 gap-2">
               {PORTION_FACTORS.map((f) => (
                 <button
@@ -95,7 +95,7 @@ export function KartuMakan({ m }: { m: MakanView }) {
                   onClick={() => jalan(() => ubahPorsi(m.id, f))}
                   className={`rounded-xl py-2.5 text-sm font-medium disabled:opacity-60 ${m.factor === f ? "bg-emerald-500 text-emerald-950" : "bg-white/10"}`}
                 >
-                  {labelFaktor(f)}x
+                  {labelPorsi(f)}
                 </button>
               ))}
             </div>

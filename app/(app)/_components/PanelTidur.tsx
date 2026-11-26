@@ -114,14 +114,14 @@ export function PanelTidur({ hariIni, riwayat, awal, targetJam }: Props) {
               ))}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-2">
-            <label className="space-y-1 text-xs text-slate-400">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="min-w-0 space-y-1 text-xs text-slate-400">
               Tidur jam
-              <input type="time" value={jamTidur} onChange={(e) => setJamTidur(e.target.value)} className="w-full rounded-xl bg-white/10 px-3 py-3 text-lg text-slate-100" />
+              <input type="time" value={jamTidur} onChange={(e) => setJamTidur(e.target.value)} className="rounded-xl bg-white/10 px-3 py-3 text-lg text-slate-100" />
             </label>
-            <label className="space-y-1 text-xs text-slate-400">
+            <label className="min-w-0 space-y-1 text-xs text-slate-400">
               Bangun jam
-              <input type="time" value={jamBangun} onChange={(e) => setJamBangun(e.target.value)} className="w-full rounded-xl bg-white/10 px-3 py-3 text-lg text-slate-100" />
+              <input type="time" value={jamBangun} onChange={(e) => setJamBangun(e.target.value)} className="rounded-xl bg-white/10 px-3 py-3 text-lg text-slate-100" />
             </label>
           </div>
 

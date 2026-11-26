@@ -7,8 +7,11 @@ test("kardio dasar 20 menit kalau laju berat normal atau belum ada data", () => 
   assert.equal(rekomendasiKardio({ mode: "normal", lajuBeratKg: 0.35 }).menit, 20);
 });
 
-test("berat naik terlalu cepat -> kardio ditambah", () => {
-  assert.equal(rekomendasiKardio({ mode: "normal", lajuBeratKg: 0.7 }).menit, 30);
+test("berat naik cepat: hari beban tetap mentok 20 menit (muat 1 jam) dengan saran jalan kaki; hari recovery ditambah", () => {
+  const k = rekomendasiKardio({ mode: "normal", lajuBeratKg: 0.7 });
+  assert.equal(k.menit, 20);
+  assert.match(k.alasan, /jalan kaki/);
+  assert.equal(rekomendasiKardio({ mode: "normal", recovery: true, lajuBeratKg: 0.7 }).menit, 45);
 });
 
 test("berat naik lambat -> kardio dikurangi (tapi nggak di bawah 10)", () => {

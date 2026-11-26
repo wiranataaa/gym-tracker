@@ -11,18 +11,19 @@ import {
   getOpenSession,
   getSessionById,
   getSessionSets,
+  getSkipped,
   getTodayPlan,
   loadExercises,
   logSets,
-  loadProgram,
-  loadRecentSessions,
   savePlan,
+  setSkipped,
   startSession,
   type ExerciseRow,
   type SessionRow,
 } from "../workout/db.ts";
-import { buildMenu, formatMenu, getSettings, isWorkoutDay, SESI_UTAMA_PER_MINGGU, targetLine, type TodayMenu } from "../workout/menu.ts";
-import { pilihHariIni } from "../program/queue.ts";
+import { buildMenu, formatMenu, getSettings, isWorkoutDay, targetLine, type TodayMenu } from "../workout/menu.ts";
+import { pratinjauBerikutnya } from "../workout/berikutnya.ts";
+import { gerakanBeres, gerakanSekarang, hitungSet, teksDilewati } from "../program/lewati.ts";
 import { bannerTimbang } from "../workout/today.ts";
 import { callbackSuplemen, catatKardio, pilihMenu, showGantiMenu, tampilSuplemen } from "./menuSuplemen.ts";
 import { perintahRamadan } from "./ramadan.ts";
@@ -51,6 +52,8 @@ const HELP = [
   "/singkat — versi 30 menit buat hari capek",
   "/skip — lewati latihan hari ini (antrean nggak maju)",
   "/selesai — tutup sesi",
+  "/lewati — udah nggak kuat atau alatnya penuh: lewati sisa set gerakan yang lagi dikerjain",
+  "/besok — intip menu latihan berikutnya",
   "/timbang 71.4 gym — catat berat badan (tambah 'gym' kalau timbang di gym sebelum latihan, 'pagi' kalau habis bangun & belum makan)",
   "/menu — ganti menu hari ini (utama A/B/C atau bonus D/E/F buat variasi)",
   "/ramadan — status mode Ramadan (on / off / auto buat mengubah)",
@@ -85,6 +88,7 @@ const DURING_BUTTONS: Keyboard = [
     { text: "➡️ Gerakan berikutnya", data: "next" },
     { text: "🏁 Selesai", data: "selesai" },
   ],
+  [{ text: "⏭️ Lewati sisa set", data: "lewati" }],
 ];
 
 // ---------- Util ----------
@@ -229,16 +233,24 @@ async function closeWorkout(ctx: Ctx, today: string, sessionId: number, energy: 
   const sesiNow = await getSessionById(sessionId);
   if (sesiNow?.cardio_min) lines.push(`🚶 Kardio: ${sesiNow.cardio_min} menit`);
 
-  const [{ days }, sessions] = await Promise.all([loadProgram(), loadRecentSessions()]);
-  const next = pilihHariIni(days, sessions, today, SESI_UTAMA_PER_MINGGU);
-  if (next) lines.push(`Berikutnya: ${next.day.name}${next.jenis === "bonus" ? " (bonus, kalau mau latihan lagi)" : ""}`);
+  const skipped = await getSkipped(sessionId);
+  if (skipped.length > 0 && sesiNow) {
+    const menu = await buildMenu(today, sesiNow.mode, sesiNow.program_day_id);
+    const teks = skipped.map((id) =>
+      teksDilewati(byId.get(id)?.name ?? "Gerakan", perExercise.get(id)?.length ?? 0, menu?.items.find((p) => p.exercise.id === id)?.sets ?? null),
+    );
+    lines.push(`⏭️ Dilewati: ${teks.join(" · ")}`);
+  }
+
+  const next = await pratinjauBerikutnya(today, settings);
+  if (next) lines.push(`Berikutnya: ${next.kapan} · ${next.dayName}`);
   lines.push(`🎯 Jangan lupa nutrisi: ${fmtInt(settings.target_kcal)} kcal · protein ${settings.target_protein_g} g`);
   if (!sesiNow?.cardio_min) lines.push("🚶 Belum kardio? Catat dengan: kardio 20 (menit)");
 
   // Pengingat timbang di gym (hari latihan terakhir minggu itu)
   const timbang = await bannerTimbang(today, settings);
   if (timbang) lines.push("", timbang, "Catat: /timbang 71.4 gym");
-  await ctx.send(lines.join("\n"));
+  await ctx.send(lines.join("\n"), next ? [[{ text: "👀 Lihat menu berikutnya", data: "besok" }]] : undefined);
 
   // Kesimpulan: angka dihitung kode, AI cuma menulis; kalau AI gagal ada versi tanpa AI
   if (working.length > 0) {
@@ -261,8 +273,8 @@ async function showNext(ctx: Ctx, today: string): Promise<void> {
   }
   const menu = await buildMenu(today, open.mode, open.program_day_id);
   if (!menu) return;
-  const done = await getSessionSets(open.id);
-  const nextItem = pickNext(menu, done);
+  const [done, skipped] = await Promise.all([getSessionSets(open.id), getSkipped(open.id)]);
+  const nextItem = pickNext(menu, done, skipped);
   if (!nextItem) {
     await ctx.send("Semua gerakan di menu udah beres 🎉 Ketik /selesai buat nutup sesi.", [[{ text: "🏁 Selesai", data: "selesai" }]]);
     return;
@@ -270,8 +282,60 @@ async function showNext(ctx: Ctx, today: string): Promise<void> {
   await ctx.send(`Berikutnya: ${nextItem.exercise.name}\n${targetLine(nextItem)}\n↳ ${nextItem.target.note}`, DURING_BUTTONS);
 }
 
-function pickNext(menu: TodayMenu, doneSets: { exercise_id: number; is_warmup: boolean }[]) {
-  return menu.items.find((p) => doneSets.filter((s) => s.exercise_id === p.exercise.id && !s.is_warmup).length < p.sets);
+function pickNext(menu: TodayMenu, doneSets: { exercise_id: number; is_warmup: boolean }[], skipped: number[]) {
+  const selesai = hitungSet(doneSets.filter((s) => !s.is_warmup).map((s) => s.exercise_id));
+  return menu.items.find((p) => !gerakanBeres({ exerciseId: p.exercise.id, sets: p.sets }, selesai, skipped));
+}
+
+/** Lewati sisa set gerakan yang sedang dikerjakan (udah nggak kuat, atau alatnya penuh). */
+async function lewatiSekarang(ctx: Ctx, today: string): Promise<void> {
+  const open = await getOpenSession(today);
+  if (!open) {
+    await ctx.send("Belum ada sesi yang jalan. Ketik /mulai dulu.");
+    return;
+  }
+  const menu = await buildMenu(today, open.mode, open.program_day_id);
+  if (!menu) return;
+  const [sets, skipped] = await Promise.all([getSessionSets(open.id), getSkipped(open.id)]);
+  const kerja = sets.filter((s) => !s.is_warmup).map((s) => s.exercise_id);
+  const rencana = menu.items.map((p) => ({ exerciseId: p.exercise.id, sets: p.sets, item: p }));
+  const sekarang = gerakanSekarang(rencana, kerja, skipped);
+  if (!sekarang) {
+    await ctx.send("Semua gerakan udah beres, nggak ada yang perlu dilewati. Ketik /selesai.", [[{ text: "🏁 Selesai", data: "selesai" }]]);
+    return;
+  }
+  const r = await setSkipped(open.id, sekarang.exerciseId, true);
+  if (!r.ok) {
+    await ctx.send(r.error);
+    return;
+  }
+  const sudah = hitungSet(kerja).get(sekarang.exerciseId) ?? 0;
+  const lines = [`⏭️ ${sekarang.item.exercise.name}: ${sudah === 0 ? "dilewati" : `sisa ${sekarang.sets - sudah} set dilewati (${sudah} set tetap tercatat)`}.`];
+  const lanjut = gerakanSekarang(rencana, kerja, [...skipped, sekarang.exerciseId]);
+  lines.push(lanjut ? `Berikutnya: ${lanjut.item.exercise.name} — ${targetLine(lanjut.item)}` : "Semua gerakan beres. Ketik /selesai kalau udah.");
+  await ctx.send(lines.join("\n"), [[{ text: "↩️ Batalin lewati", data: `balik:${sekarang.exerciseId}` }], ...DURING_BUTTONS.slice(0, 1)]);
+}
+
+async function batalLewati(ctx: Ctx, today: string, exerciseId: number): Promise<void> {
+  const open = await getOpenSession(today);
+  if (!open) {
+    await ctx.send("Sesinya udah ditutup.");
+    return;
+  }
+  const r = await setSkipped(open.id, exerciseId, false);
+  await ctx.send(r.ok ? "↩️ Oke, gerakannya dibuka lagi. Lanjut catat setnya." : r.error, DURING_BUTTONS);
+}
+
+async function tampilBerikutnya(ctx: Ctx, today: string): Promise<void> {
+  const p = await pratinjauBerikutnya(today, await getSettings());
+  if (!p) {
+    await ctx.send("Program latihan belum ada di database.");
+    return;
+  }
+  const lines = [`👀 ${p.kapan}: ${p.dayName}`, ""];
+  p.gerakan.forEach((g, i) => lines.push(`${i + 1}. ${g.name}`, `   ${g.target}`));
+  lines.push("", `🚶 Kardio: ${p.kardioMenit} menit`, "", "Ini pratinjau, belum memulai sesi. Target dihitung dari catatan lo sampai sekarang.");
+  await ctx.send(lines.join("\n"));
 }
 
 const BANTUAN_FORMAT = "Format nggak kebaca 🤔 Coba kayak gini:\nbench 60x10x3\nbench 60 10,10,9\nsquat 80 8 8 7 rpe8\n\nKalau mau cek perintah, ketik /bantuan.";
@@ -420,7 +484,7 @@ async function catatSetKeSesi(
         ...before,
         ...parsed.reps.map(() => ({ exercise_id: exercise.id, is_warmup: false })),
       ];
-      const nxt = pickNext(menu, after);
+      const nxt = pickNext(menu, after, await getSkipped(session.id));
       if (nxt && (!planned || doneNow >= planned.sets)) lines.push(`Berikutnya: ${nxt.exercise.name} — ${targetLine(nxt)}`);
       else if (!nxt) lines.push("Semua gerakan di menu beres! Ketik /selesai kalau udah puas.");
     }
@@ -496,6 +560,10 @@ export async function handleBotInput(input: BotUpdate, ctx: Ctx): Promise<void> 
     if (pm) return pilihMenu(ctx, today, Number(pm[1]), () => showToday(ctx, today, true));
     if (await callbackSuplemen(ctx, today, data)) return;
     if (data === "next") return showNext(ctx, today);
+    if (data === "lewati") return lewatiSekarang(ctx, today);
+    if (data === "besok") return tampilBerikutnya(ctx, today);
+    const balik = data.match(/^balik:(\d+)$/);
+    if (balik) return batalLewati(ctx, today, Number(balik[1]));
     if (data === "selesai") return askEnergy(ctx, today);
     const e = data.match(/^energi:(\d+):([1-5])$/);
     if (e) return closeWorkout(ctx, today, parseInt(e[1], 10), parseInt(e[2], 10));
@@ -524,6 +592,10 @@ export async function handleBotInput(input: BotUpdate, ctx: Ctx): Promise<void> 
         return skipToday(ctx, today);
       case "/selesai":
         return askEnergy(ctx, today);
+      case "/lewati":
+        return lewatiSekarang(ctx, today);
+      case "/besok":
+        return tampilBerikutnya(ctx, today);
       case "/timbang":
         return logWeight(ctx, rest.join(" "));
       case "/makan":

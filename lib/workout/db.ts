@@ -73,6 +73,8 @@ export type PlanRow = {
   program_day_id: number | null;
   mode: "normal" | "singkat";
   status: "disarankan" | "dikerjakan" | "dilewati";
+  /** data tambahan rencana hari itu, sekarang berisi { waktu_gym } */
+  plan: unknown;
 };
 
 const EXERCISE_COLS = "id,name,aliases,muscle_group,kind,equipment,increment_kg,is_bodyweight";
@@ -200,7 +202,7 @@ export async function loadRecentSessions(limit = 30): Promise<(SessionLite & { i
 
 export async function getTodayPlan(today: string): Promise<PlanRow | null> {
   return must(
-    await db().from("daily_plans").select("plan_date,program_day_id,mode,status").eq("plan_date", today).maybeSingle(),
+    await db().from("daily_plans").select("plan_date,program_day_id,mode,status,plan").eq("plan_date", today).maybeSingle(),
   );
 }
 

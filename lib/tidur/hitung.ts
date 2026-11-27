@@ -63,6 +63,37 @@ export function susunWaktuTidur(tanggalBangun: string, jamTidur: string, jamBang
   return { ok: true, waktu: { sleptAt, wokeAt, durasiMenit } };
 }
 
+/** Tebakan tanggal mulai tidur dari tanggal bangun: jam tidur lebih besar dari jam bangun = malam sebelumnya. */
+export function tebakTanggalTidur(tanggalBangun: string, jamTidur: string, jamBangun: string): string {
+  const t = bacaJam(jamTidur);
+  const b = bacaJam(jamBangun);
+  return t != null && b != null && t > b ? addDays(tanggalBangun, -1) : tanggalBangun;
+}
+
+const tanggalSah = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && addDays(d, 0) === d;
+
+/**
+ * Susun waktu tidur dari tanggal DAN jam yang diisi sendiri (formulir di app), jadi nggak ada tebak-tebakan.
+ * `sekarang` dipakai menolak waktu bangun yang belum kejadian (toleransi 5 menit).
+ */
+export function susunWaktuTidurTanggal(
+  m: { tanggalTidur: string; jamTidur: string; tanggalBangun: string; jamBangun: string },
+  sekarang: Date = new Date(),
+): { ok: true; waktu: WaktuTidur } | { ok: false; error: string } {
+  const t = bacaJam(m.jamTidur);
+  const b = bacaJam(m.jamBangun);
+  if (t == null || b == null) return { ok: false, error: "Jam tidur dan jam bangunnya diisi dulu" };
+  if (!tanggalSah(m.tanggalTidur) || !tanggalSah(m.tanggalBangun)) return { ok: false, error: "Tanggal tidur dan tanggal bangunnya diisi dulu" };
+  const sleptAt = wibIso(m.tanggalTidur, t);
+  const wokeAt = wibIso(m.tanggalBangun, b);
+  const durasiMenit = Math.round((new Date(wokeAt).getTime() - new Date(sleptAt).getTime()) / 60_000);
+  if (durasiMenit <= 0) return { ok: false, error: "Waktu bangun harus sesudah waktu tidur. Cek tanggalnya." };
+  if (durasiMenit < MIN_DURASI_MENIT) return { ok: false, error: "Durasi tidurnya terlalu pendek, cek lagi tanggal dan jamnya" };
+  if (durasiMenit > MAKS_DURASI_MENIT) return { ok: false, error: "Durasi tidurnya lebih dari 16 jam, cek lagi tanggalnya" };
+  if (new Date(wokeAt).getTime() > sekarang.getTime() + 5 * 60_000) return { ok: false, error: "Waktu bangunnya belum kejadian. Cek tanggal dan jam bangun." };
+  return { ok: true, waktu: { sleptAt, wokeAt, durasiMenit } };
+}
+
 /** 390 -> "6 jam 30 menit"; 420 -> "7 jam" */
 export function fmtDurasi(menit: number): string {
   const j = Math.floor(menit / 60);

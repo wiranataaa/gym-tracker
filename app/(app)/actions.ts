@@ -5,8 +5,9 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { buatKesimpulanSesi } from "@/lib/ai/summary.ts";
 import { requireOwner, supabaseAuth } from "@/lib/auth.ts";
+import { sahWaktuGym } from "@/lib/program/waktu.ts";
 import { hapusTidur, simpanTidur } from "@/lib/tidur/db.ts";
-import { addDays, todayWIB } from "@/lib/time.ts";
+import { todayWIB } from "@/lib/time.ts";
 import {
   closeStaleSessions,
   deleteSet,
@@ -31,18 +32,31 @@ function refresh() {
   revalidatePath("/");
 }
 
-/** Catat tidur dari app. kemarin=true kalau bangunnya kemarin (lupa mencatat). */
-export async function simpanTidurApp(input: { jamTidur: string; jamBangun: string; kualitas: number | null; catatan: string; kemarin: boolean }): Promise<Result> {
+/**
+ * Catat tidur dari app: tanggal dan jam tidur serta bangun diisi sendiri. `asal` = tanggal bangun
+ * catatan yang lagi diubah; kalau tanggal bangunnya dipindah, catatan lama dihapus.
+ */
+export async function simpanTidurApp(input: {
+  tanggalTidur: string;
+  jamTidur: string;
+  tanggalBangun: string;
+  jamBangun: string;
+  kualitas: number | null;
+  catatan: string;
+  asal: string | null;
+}): Promise<Result> {
   await requireOwner();
-  const hariIni = todayWIB();
+  const tanggalBangun = String(input.tanggalBangun ?? "");
   const r = await simpanTidur({
-    tanggalBangun: input.kemarin ? addDays(hariIni, -1) : hariIni,
+    tanggalTidur: String(input.tanggalTidur ?? ""),
+    tanggalBangun,
     jamTidur: String(input.jamTidur ?? ""),
     jamBangun: String(input.jamBangun ?? ""),
     kualitas: input.kualitas == null ? null : Number(input.kualitas),
     catatan: String(input.catatan ?? "").slice(0, 300),
   });
   if (!r.ok) return { ok: false, error: r.error };
+  if (input.asal && input.asal !== tanggalBangun && /^\d{4}-\d{2}-\d{2}$/.test(input.asal)) await hapusTidur(input.asal);
   refresh();
   return { ok: true };
 }
@@ -87,6 +101,15 @@ export async function ubahMode(mode: "normal" | "singkat"): Promise<Result> {
   const today = todayWIB();
   if (await getOpenSession(today)) return { ok: false, error: "Sesi udah jalan, mode nggak bisa diganti" };
   await savePlan(today, { mode, status: "disarankan" });
+  refresh();
+  return { ok: true };
+}
+
+/** Rencana jam gym hari ini (pagi / malam); null = kosongkan. */
+export async function pilihWaktuGym(waktu: "pagi" | "malam" | null): Promise<Result> {
+  await requireOwner();
+  if (waktu !== null && !sahWaktuGym(waktu)) return { ok: false, error: "Pilihan nggak valid" };
+  await savePlan(todayWIB(), { plan: waktu ? { waktu_gym: waktu } : [] });
   refresh();
   return { ok: true };
 }

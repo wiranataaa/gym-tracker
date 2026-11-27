@@ -1,3 +1,4 @@
+import { bacaWaktuGym } from "../program/waktu.ts";
 import { db, must } from "../supabase.ts";
 import { getOpenSession, getSettings, getTodayPlan } from "../workout/db.ts";
 import { colekanMalam, colekanPagi, ringkasMinggu, type Colekan, type Minggu } from "./hitung.ts";
@@ -30,6 +31,6 @@ export async function ambilKonsistensi(today: string): Promise<Konsistensi> {
   return {
     minggu,
     pagi: colekanPagi({ today, tanggalSelesai, hariLatihan, abaikanHariIni }),
-    malam: colekanMalam({ today, minggu, hariLatihan, abaikanHariIni }),
+    malam: colekanMalam({ today, minggu, hariLatihan, abaikanHariIni, waktuGym: bacaWaktuGym(plan?.plan) }),
   };
 }

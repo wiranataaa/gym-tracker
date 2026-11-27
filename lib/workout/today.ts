@@ -4,6 +4,7 @@ import { pengingatTimbang } from "../bot/pengingat.ts";
 import type { Kardio } from "../program/kardio.ts";
 import { roundingStep } from "../program/progression.ts";
 import { hitungSet, teksDilewati } from "../program/lewati.ts";
+import { bacaWaktuGym, type WaktuGym } from "../program/waktu.ts";
 import { awalMinggu } from "../report/hitung.ts";
 import { isoWeekday } from "../time.ts";
 import { pratinjauBerikutnya, type Pratinjau } from "./berikutnya.ts";
@@ -79,6 +80,8 @@ export type TodayView =
       targetProteinG: number;
       ramadan: boolean;
       deload: boolean;
+      /** rencana jam gym hari ini */
+      waktuGym: WaktuGym | null;
     }
   | {
       kind: "berjalan";
@@ -244,5 +247,6 @@ export async function loadTodayView(today: string, force: boolean): Promise<Toda
     targetProteinG: settings.target_protein_g,
     ramadan: menu.ramadan,
     deload: menu.deload,
+    waktuGym: bacaWaktuGym(plan?.plan),
   };
 }

@@ -55,14 +55,15 @@ export async function pengingatProtein(ctx: Ctx): Promise<boolean> {
 }
 
 /**
- * Colekan anti-bolos sore: hari latihan, belum ada sesi, jatah minggu ini belum penuh.
- * Diam kalau hari ini sudah latihan, lagi latihan, atau sengaja di-skip. Teksnya dari kode.
+ * Colekan sore: pengingat gym malam kalau Nata menjadwalkannya, atau colekan anti-bolos (hari latihan,
+ * belum ada sesi, jatah minggu belum penuh). Diam kalau sudah latihan, lagi latihan, atau di-skip.
  */
 export async function colekanLatihan(ctx: Ctx): Promise<boolean> {
   const today = ctx.today ?? todayWIB();
   const { malam } = await ambilKonsistensi(today);
   if (!malam) return false;
-  await ctx.send(`💢 ${malam}`, [[{ text: "💪 Buka app, mulai", url: APP_URL }]]);
+  // Pengingat rencana sudah punya ikon sendiri; colekan biasa diberi 💢
+  await ctx.send(malam.startsWith("🌙") ? malam : `💢 ${malam}`, [[{ text: "💪 Buka app, mulai", url: APP_URL }]]);
   return true;
 }
 

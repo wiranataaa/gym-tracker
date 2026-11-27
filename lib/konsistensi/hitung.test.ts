@@ -139,6 +139,28 @@ test("colekanMalam: jatah nggak kekejar -> jujur tapi tetap ajak", () => {
   assert.ok(t?.includes("nggak kekejar"));
 });
 
+const rencana = (today: string, tanggalSelesai: string[], waktuGym: "pagi" | "malam", abaikanHariIni = false) =>
+  colekanMalam({ today, minggu: ringkasMinggu({ today, tanggalSelesai, hariLatihan: KERJA, target: 3 }), hariLatihan: KERJA, abaikanHariIni, waktuGym });
+
+test("colekanMalam: dijadwalkan malam -> pengingat rencana, termasuk saat jatah penuh atau weekend", () => {
+  const t = rencana("2026-12-04", ["2026-11-30", "2026-12-02"], "malam");
+  assert.ok(t?.includes("malam ini"));
+  assert.ok(t?.includes("2/3"));
+  assert.ok(t?.includes("kesempatan terakhir"));
+  assert.ok(rencana("2026-12-04", ["2026-11-30", "2026-12-01", "2026-12-02"], "malam")?.includes("3/3"));
+  assert.ok(rencana("2026-12-05", [], "malam"));
+});
+
+test("colekanMalam: dijadwalkan malam tapi sudah latihan, lagi latihan, atau di-skip -> diam", () => {
+  assert.equal(rencana("2026-12-04", ["2026-12-04"], "malam"), null);
+  assert.equal(rencana("2026-12-04", [], "malam", true), null);
+});
+
+test("colekanMalam: dijadwalkan pagi tapi belum kejadian -> disebut", () => {
+  assert.ok(rencana("2026-12-02", ["2026-11-30"], "pagi")?.includes("Rencananya pagi"));
+  assert.equal(rencana("2026-12-05", [], "pagi"), null);
+});
+
 test("colekanMalam: diam kalau jatah penuh, sudah latihan hari ini, di-skip, atau weekend", () => {
   assert.equal(malam("2026-12-04", ["2026-11-30", "2026-12-01", "2026-12-02"]), null); // jatah penuh
   assert.equal(malam("2026-12-04", ["2026-12-04"]), null); // sudah latihan

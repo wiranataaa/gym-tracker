@@ -2,11 +2,11 @@ import Link from "next/link";
 import { requireOwner } from "@/lib/auth.ts";
 import { ambilKonsistensi } from "@/lib/konsistensi/db.ts";
 import { kutipanHariIni, kutipanSelesai } from "@/lib/kutipan.ts";
-import { fmtDurasi, nilaiTidur, TARGET_TIDUR_JAM } from "@/lib/tidur/hitung.ts";
-import { getTidur, listTidur, tidurTerakhir } from "@/lib/tidur/db.ts";
+import { listTidur, tidurTerakhir } from "@/lib/tidur/db.ts";
+import { TARGET_TIDUR_JAM } from "@/lib/tidur/hitung.ts";
 import { namaHari, todayWIB, fmtInt, fmtKg } from "@/lib/time.ts";
 import { loadTodayView } from "@/lib/workout/today.ts";
-import { PanelTidur, type RiwayatTidurView, type TidurView } from "./_components/PanelTidur.tsx";
+import { PanelTidur } from "./_components/PanelTidur.tsx";
 import { BannerTimbang } from "./_components/BannerTimbang.tsx";
 import { GantiMenu } from "./_components/GantiMenu.tsx";
 import { KartuBerikutnya } from "./_components/KartuBerikutnya.tsx";
@@ -15,6 +15,7 @@ import { KesimpulanAI } from "./_components/KesimpulanAI.tsx";
 import { PanelMulai } from "./_components/PanelMulai.tsx";
 import { PanelSkip } from "./_components/PanelSkip.tsx";
 import { Pencatat } from "./_components/Pencatat.tsx";
+import { PilihWaktu } from "./_components/PilihWaktu.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -22,28 +23,12 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
   await requireOwner();
   const { paksa } = await searchParams;
   const today = todayWIB();
-  const [view, tidurHariIni, tidur7, tidurAkhir, konsistensi] = await Promise.all([
+  const [view, daftarTidur, tidurAkhir, konsistensi] = await Promise.all([
     loadTodayView(today, paksa === "1"),
-    getTidur(today),
-    listTidur(today, 7),
+    listTidur(today, 14),
     tidurTerakhir(),
     ambilKonsistensi(today),
   ]);
-  const tidurView: TidurView | null = tidurHariIni && {
-    tanggalBangun: tidurHariIni.tanggalBangun,
-    jamTidur: tidurHariIni.jamTidur,
-    jamBangun: tidurHariIni.jamBangun,
-    durasiTeks: fmtDurasi(tidurHariIni.durasiMenit),
-    ...nilaiTidur(tidurHariIni.durasiMenit),
-    kualitas: tidurHariIni.kualitas,
-    catatan: tidurHariIni.catatan,
-  };
-  const riwayatTidur: RiwayatTidurView[] = [...tidur7].reverse().map((t) => ({
-    tanggal: t.tanggalBangun,
-    hari: namaHari(t.tanggalBangun).slice(0, 3),
-    durasiTeks: fmtDurasi(t.durasiMenit).replace(" jam ", "j ").replace(" menit", "m").replace(" jam", "j"),
-    level: nilaiTidur(t.durasiMenit).level,
-  }));
 
   return (
     <div className="space-y-4">
@@ -70,9 +55,9 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
       <KartuMinggu data={konsistensi} />
 
       <PanelTidur
-        key={tidurView ? `${tidurView.jamTidur}-${tidurView.jamBangun}-${tidurView.kualitas}-${tidurView.catatan}` : "kosong"}
-        hariIni={tidurView}
-        riwayat={riwayatTidur}
+        key={today}
+        today={today}
+        daftar={daftarTidur}
         awal={{ jamTidur: tidurAkhir?.jamTidur ?? "23:00", jamBangun: tidurAkhir?.jamBangun ?? "06:00" }}
         targetJam={TARGET_TIDUR_JAM}
       />
@@ -99,6 +84,7 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
 
       {view.kind === "siap" && (
         <>
+          <PilihWaktu saatIni={view.waktuGym} />
           <BannerTimbang teks={view.timbang} />
           <PanelMulai view={view} />
           <GantiMenu pilihan={view.pilihan} saatIni={view.dayId} />

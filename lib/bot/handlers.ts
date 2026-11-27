@@ -25,6 +25,7 @@ import { buildMenu, formatMenu, getSettings, isWorkoutDay, targetLine, type Toda
 import { pratinjauBerikutnya } from "../workout/berikutnya.ts";
 import { ambilCalon, batalkanGanti, lakukanGanti } from "../workout/ganti.ts";
 import { gerakanBeres, gerakanSekarang, hitungSet, teksDilewati } from "../program/lewati.ts";
+import { PESAN_WAKTU, type WaktuGym } from "../program/waktu.ts";
 import { bannerTimbang } from "../workout/today.ts";
 import { callbackSuplemen, catatKardio, pilihMenu, showGantiMenu, tampilSuplemen } from "./menuSuplemen.ts";
 import { perintahRamadan } from "./ramadan.ts";
@@ -78,6 +79,10 @@ const HELP = [
 
 const MENU_BUTTONS: Keyboard = [
   [{ text: "💪 Gas, mulai", data: "mulai" }],
+  [
+    { text: "☀️ Gym pagi", data: "wk:pagi" },
+    { text: "🌙 Gym malam", data: "wk:malam" },
+  ],
   [
     { text: "😮‍💨 Versi singkat", data: "singkat" },
     { text: "⏭️ Hari ini skip", data: "skip" },
@@ -177,6 +182,13 @@ async function setMode(ctx: Ctx, today: string, mode: "normal" | "singkat"): Pro
   await savePlan(today, { mode, status: "disarankan" });
   await ctx.send("Oke, versi singkat: cuma gerakan intinya, tetap kehitung latihan 👍");
   await showToday(ctx, today, true);
+}
+
+async function setWaktuGym(ctx: Ctx, today: string, waktu: WaktuGym): Promise<void> {
+  const plan = await getTodayPlan(today);
+  // Kalau tadinya di-skip, memilih jam berarti jadi latihan lagi
+  await savePlan(today, { plan: { waktu_gym: waktu }, ...(plan?.status === "dilewati" ? { status: "disarankan" as const } : {}) });
+  await ctx.send(PESAN_WAKTU[waktu]);
 }
 
 async function skipToday(ctx: Ctx, today: string): Promise<void> {
@@ -611,6 +623,7 @@ export async function handleBotInput(input: BotUpdate, ctx: Ctx): Promise<void> 
     if (await handleNutriCallback(ctx, data)) return;
     if (data === "mulai") return void (await startWorkout(ctx, today));
     if (data === "singkat") return setMode(ctx, today, "singkat");
+    if (data === "wk:pagi" || data === "wk:malam") return setWaktuGym(ctx, today, data === "wk:pagi" ? "pagi" : "malam");
     if (data === "skip") return skipToday(ctx, today);
     if (data === "menu") return showToday(ctx, today, true);
     if (data === "ganti") return showGantiMenu(ctx, today);

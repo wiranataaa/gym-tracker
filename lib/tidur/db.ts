@@ -1,6 +1,6 @@
 import { db } from "../supabase.ts";
-import { addDays } from "../time.ts";
-import { jamWIB, susunWaktuTidur } from "./hitung.ts";
+import { addDays, todayWIB } from "../time.ts";
+import { jamWIB, susunWaktuTidur, susunWaktuTidurTanggal } from "./hitung.ts";
 
 // Catatan tidur per malam, dikunci tanggal BANGUN (WIB). Semua pembacaan aman kalau tabelnya
 // belum ada (SQL 009 belum dijalankan): hasilnya kosong, bukan error, supaya halaman lain tetap jalan.
@@ -8,6 +8,7 @@ import { jamWIB, susunWaktuTidur } from "./hitung.ts";
 export type Tidur = {
   id: number;
   tanggalBangun: string;
+  tanggalTidur: string; // tanggal WIB mulai tidur
   jamTidur: string; // "HH:MM" WIB
   jamBangun: string;
   durasiMenit: number;
@@ -22,6 +23,7 @@ const COLS = "id,wake_date,slept_at,woke_at,duration_min,quality,note";
 const toTidur = (r: Row): Tidur => ({
   id: r.id,
   tanggalBangun: r.wake_date,
+  tanggalTidur: todayWIB(new Date(r.slept_at)),
   jamTidur: jamWIB(r.slept_at),
   jamBangun: jamWIB(r.woke_at),
   durasiMenit: r.duration_min,
@@ -64,10 +66,15 @@ export async function simpanTidur(args: {
   tanggalBangun: string;
   jamTidur: string;
   jamBangun: string;
+  /** diisi dari formulir app; kalau kosong (bot) tanggal tidurnya ditebak dari jam */
+  tanggalTidur?: string;
   kualitas?: number | null;
   catatan?: string | null;
 }): Promise<HasilSimpanTidur> {
-  const w = susunWaktuTidur(args.tanggalBangun, args.jamTidur, args.jamBangun);
+  const w =
+    args.tanggalTidur != null
+      ? susunWaktuTidurTanggal({ tanggalTidur: args.tanggalTidur, jamTidur: args.jamTidur, tanggalBangun: args.tanggalBangun, jamBangun: args.jamBangun })
+      : susunWaktuTidur(args.tanggalBangun, args.jamTidur, args.jamBangun);
   if (!w.ok) return w;
   if (args.kualitas != null && !(Number.isInteger(args.kualitas) && args.kualitas >= 1 && args.kualitas <= 5)) return { ok: false, error: "Kualitas tidur harus 1-5" };
 

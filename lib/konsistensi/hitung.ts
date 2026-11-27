@@ -1,6 +1,7 @@
 // Konsistensi latihan: titik per hari minggu ini, skor, dan colekan anti-bolos.
 // Murni kode (tanpa AI, tanpa database) supaya gampang dites. Semua angka dihitung di sini.
 
+import type { WaktuGym } from "../program/waktu.ts";
 import { awalMinggu, geser, skorKonsistensi } from "../report/hitung.ts";
 import { isoWeekday, namaHari } from "../time.ts";
 
@@ -129,15 +130,22 @@ export function colekanPagi(m: { today: string; tanggalSelesai: string[]; hariLa
 
 /**
  * Colekan sore/malam: dikirim kalau hari ini hari latihan, belum ada sesi, dan jatah minggu ini belum penuh.
+ * Kalau Nata sendiri menjadwalkan gym MALAM, pengingatnya dikirim walau jatah sudah penuh atau bukan hari latihan.
  * Mengembalikan null kalau nggak perlu dicolek.
  */
-export function colekanMalam(m: { today: string; minggu: Minggu; hariLatihan: number[]; abaikanHariIni: boolean }): string | null {
-  if (m.abaikanHariIni || !m.hariLatihan.includes(isoWeekday(m.today))) return null;
-  const { selesai, target, butuh, sisaHari, masihBisa } = m.minggu;
-  if (butuh <= 0) return null;
+export function colekanMalam(m: { today: string; minggu: Minggu; hariLatihan: number[]; abaikanHariIni: boolean; waktuGym?: WaktuGym | null }): string | null {
+  if (m.abaikanHariIni) return null;
   if (m.minggu.titik.some((t) => t.tanggal === m.today && t.status === "selesai")) return null;
+  const { selesai, target, butuh, sisaHari, masihBisa } = m.minggu;
 
-  const status = `Minggu ini baru ${selesai}/${target} sesi.`;
+  if (m.waktuGym === "malam") {
+    const penentu = butuh > 0 && sisaHari === 1 ? " Ini kesempatan terakhir minggu ini." : "";
+    return `🌙 Waktunya gym sesuai rencana lo: malam ini. Minggu ini ${selesai}/${target} sesi.${penentu} Gas, capek? Versi 30 menit juga kehitung.`;
+  }
+
+  if (!m.hariLatihan.includes(isoWeekday(m.today)) || butuh <= 0) return null;
+
+  const status = `${m.waktuGym === "pagi" ? "Rencananya pagi tapi belum kejadian. " : ""}Minggu ini baru ${selesai}/${target} sesi.`;
   if (!masihBisa) {
     return `Hari ini belum ada sesi tercatat. ${status} Jatah minggu ini udah nggak kekejar, tapi sesi tetap kehitung. Jangan biarin minggunya nol: 30 menit pun lebih baik daripada nggak sama sekali.`;
   }

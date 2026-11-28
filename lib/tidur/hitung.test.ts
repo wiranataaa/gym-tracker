@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bacaJam, bacaTidurTeks, fmtDurasi, fmtJam, jamWIB, nilaiTidur, rataMenit, susunWaktuTidur, susunWaktuTidurTanggal, tebakTanggalTidur } from "./hitung.ts";
+import { bacaJam, bacaTidurTeks, cariBentrok, fmtDurasi, fmtJam, jamWIB, nilaiTidur, rataMenit, ringkasHari, susunMulaiTidur, susunWaktuTidur, susunWaktuTidurTanggal, tebakTanggalTidur, totalPerHari } from "./hitung.ts";
 
 test("bacaJam: berbagai penulisan jam", () => {
   assert.equal(bacaJam("23:30"), 23 * 60 + 30);
@@ -86,6 +86,50 @@ test("tebakTanggalTidur", () => {
   assert.equal(tebakTanggalTidur("2026-11-27", "23:30", "06:00"), "2026-11-26");
   assert.equal(tebakTanggalTidur("2026-11-27", "00:30", "06:00"), "2026-11-27");
   assert.equal(tebakTanggalTidur("2026-12-01", "22:00", "05:00"), "2026-11-30");
+});
+
+const rentang = (id: number, tanggalTidur: string, jamTidur: string, tanggalBangun: string, jamBangun: string) => ({
+  id,
+  sleptAt: `${tanggalTidur}T${jamTidur}:00+07:00`,
+  wokeAt: `${tanggalBangun}T${jamBangun}:00+07:00`,
+});
+
+test("cariBentrok: dua tidur di tanggal yang sama (kasus Nata) nggak bentrok", () => {
+  const pagi = rentang(1, "2026-11-27", "00:12", "2026-11-27", "07:30");
+  const malam = rentang(2, "2026-11-27", "22:30", "2026-11-28", "05:30");
+  assert.equal(cariBentrok([pagi], malam.sleptAt, malam.wokeAt), null);
+  assert.equal(cariBentrok([malam], pagi.sleptAt, pagi.wokeAt), null);
+});
+
+test("cariBentrok: tumpang tindih ketahuan, menempel persis aman, diri sendiri dikecualikan", () => {
+  const a = rentang(1, "2026-11-27", "00:12", "2026-11-27", "07:30");
+  assert.equal(cariBentrok([a], "2026-11-27T07:00:00+07:00", "2026-11-27T09:00:00+07:00")?.id, 1);
+  assert.equal(cariBentrok([a], "2026-11-26T23:00:00+07:00", "2026-11-27T08:00:00+07:00")?.id, 1);
+  assert.equal(cariBentrok([a], "2026-11-27T07:30:00+07:00", "2026-11-27T09:00:00+07:00"), null);
+  assert.equal(cariBentrok([a], a.sleptAt, a.wokeAt, 1), null);
+});
+
+test("susunMulaiTidur: sekarang, sedikit di depan, terlalu jauh, dan terlalu lama", () => {
+  const now = new Date("2026-11-27T23:56:00+07:00");
+  assert.ok(susunMulaiTidur("2026-11-27", "23:56", now).ok);
+  assert.ok(susunMulaiTidur("2026-11-28", "00:30", now).ok); // 34 menit lagi
+  assert.equal(susunMulaiTidur("2026-11-28", "02:00", now).ok, false);
+  assert.equal(susunMulaiTidur("2026-11-27", "07:00", now).ok, false); // hampir 17 jam lalu
+  assert.equal(susunMulaiTidur("", "23:00", now).ok, false);
+});
+
+test("ringkasHari dan totalPerHari: tidur lebih dari sekali dijumlah", () => {
+  const s = [
+    { tanggalBangun: "2026-11-27", durasiMenit: 90, nama: "siang" },
+    { tanggalBangun: "2026-11-27", durasiMenit: 420, nama: "malam" },
+    { tanggalBangun: "2026-11-28", durasiMenit: 400, nama: "besok" },
+  ];
+  const r = ringkasHari(s.slice(0, 2))!;
+  assert.equal(r.totalMenit, 510);
+  assert.equal(r.utama.nama, "malam");
+  assert.deepEqual(r.lain.map((x) => x.nama), ["siang"]);
+  assert.equal(ringkasHari([]), null);
+  assert.deepEqual([...totalPerHari(s)], [["2026-11-27", 510], ["2026-11-28", 400]]);
 });
 
 test("jamWIB mengubah waktu ISO jadi jam WIB", () => {

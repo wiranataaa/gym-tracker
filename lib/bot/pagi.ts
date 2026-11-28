@@ -104,11 +104,12 @@ export async function pesanPagi(ctx: Ctx): Promise<void> {
   const baris: Button[][] = [
     [
       { text: "📱 Buka app", url: APP_URL },
-      ...(tidur.sudah ? [] : [{ text: "😴 Catat tidur", url: APP_URL }]),
+      ...(tidur.perluCatat ? [{ text: "😴 Catat tidur", url: APP_URL }] : []),
       ...(timbang.perlu ? [{ text: "⚖️ Catat timbangan", url: `${APP_URL}/badan` }] : []),
       ...(foto ? [{ text: "📸 Foto progres", url: `${APP_URL}/badan` }] : []),
     ],
   ];
+  if (tidur.bangun) baris.push([tidur.bangun]);
   if (tombolSuplemen.length > 0) baris.push(tombolSuplemen);
   await ctx.send(lines.join("\n"), baris);
 

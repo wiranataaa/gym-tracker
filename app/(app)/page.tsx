@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireOwner } from "@/lib/auth.ts";
 import { ambilKonsistensi } from "@/lib/konsistensi/db.ts";
 import { kutipanHariIni, kutipanSelesai } from "@/lib/kutipan.ts";
-import { listTidur, tidurTerakhir } from "@/lib/tidur/db.ts";
+import { listTidur, tidurAktif, tidurTerakhir } from "@/lib/tidur/db.ts";
 import { TARGET_TIDUR_JAM } from "@/lib/tidur/hitung.ts";
 import { namaHari, todayWIB, fmtInt, fmtKg } from "@/lib/time.ts";
 import { loadTodayView } from "@/lib/workout/today.ts";
@@ -23,9 +23,10 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
   await requireOwner();
   const { paksa } = await searchParams;
   const today = todayWIB();
-  const [view, daftarTidur, tidurAkhir, konsistensi] = await Promise.all([
+  const [view, daftarTidur, tidurJalan, tidurAkhir, konsistensi] = await Promise.all([
     loadTodayView(today, paksa === "1"),
     listTidur(today, 14),
+    tidurAktif(),
     tidurTerakhir(),
     ambilKonsistensi(today),
   ]);
@@ -58,6 +59,7 @@ export default async function HariIniPage({ searchParams }: { searchParams: Prom
         key={today}
         today={today}
         daftar={daftarTidur}
+        aktif={tidurJalan}
         awal={{ jamTidur: tidurAkhir?.jamTidur ?? "23:00", jamBangun: tidurAkhir?.jamBangun ?? "06:00" }}
         targetJam={TARGET_TIDUR_JAM}
       />

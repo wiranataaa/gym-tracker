@@ -3,8 +3,8 @@ import { detectPR, estimate1RM } from "../program/pr.ts";
 import { nextProgramDay } from "../program/queue.ts";
 import { dayTotals } from "../nutrition/db.ts";
 import { db, must } from "../supabase.ts";
-import { getTidur, listTidur } from "../tidur/db.ts";
-import { fmtDurasi, jamDesimal, jamWIB, nilaiTidur, rataMenit, TARGET_TIDUR_JAM } from "../tidur/hitung.ts";
+import { listTidur, tidurHari } from "../tidur/db.ts";
+import { fmtDurasi, jamDesimal, jamWIB, nilaiTidur, rataMenit, ringkasHari, TARGET_TIDUR_JAM, totalPerHari } from "../tidur/hitung.ts";
 import { addDays, isoWeekday, namaHari } from "../time.ts";
 import { getHistory, getSettings, getSkipped, getSwaps, loadExercises, loadProgram, loadRecentSessions } from "./db.ts";
 import { getSessionDetail } from "./history.ts";
@@ -63,6 +63,8 @@ export type TidurSummary = {
   jam_bangun_ke_gym: number | null;
   rata2_tidur_7_hari_jam: number | null;
   malam_tercatat_7_hari: number;
+  /** tidur tambahan di hari yang sama (jam_tidur/jam_bangun di atas = tidur terlama; durasi = TOTAL) */
+  tidur_lain?: { jam_tidur: string; jam_bangun: string; durasi_teks: string }[];
 };
 
 const r0 = (n: number) => Math.round(n);
@@ -142,27 +144,34 @@ export async function buildSummaryInput(sessionId: number): Promise<SummaryInput
 
   // Jam gym + tidur semalam (pembacaan aman: kalau tabel tidur belum ada hasilnya kosong)
   const sesiWaktu = must(await db().from("workout_sessions").select("started_at,ended_at").eq("id", sessionId).maybeSingle()) as { started_at: string; ended_at: string | null } | null;
-  const [tidur, tidur7] = await Promise.all([getTidur(detail.date), listTidur(detail.date, 7)]);
+  const [sehari, tidur7] = await Promise.all([tidurHari(detail.date), listTidur(detail.date, 7)]);
   const mulaiGym = sesiWaktu?.started_at ?? null;
   const selesaiGym = sesiWaktu?.ended_at ?? null;
   const durasiGym = mulaiGym && selesaiGym ? Math.round((new Date(selesaiGym).getTime() - new Date(mulaiGym).getTime()) / 60_000) : null;
   let tidurData: TidurSummary | null = null;
-  if (tidur) {
-    const n = nilaiTidur(tidur.durasiMenit);
-    const rata = rataMenit(tidur7.map((t) => t.durasiMenit));
-    const bangunKeGym = mulaiGym && tidur ? (new Date(mulaiGym).getTime() - new Date(`${tidur.tanggalBangun}T${tidur.jamBangun}:00+07:00`).getTime()) / 3_600_000 : null;
+  // Tidur yang selesai sebelum gym (kalau jam gym nggak cocok dengan satu pun, pakai semua tidur hari itu)
+  const sebelumGym = sehari.filter((t) => !mulaiGym || Date.parse(t.wokeAt) <= Date.parse(mulaiGym));
+  const ringkas = ringkasHari(sebelumGym.length ? sebelumGym : sehari);
+  if (ringkas) {
+    const { utama, lain, totalMenit } = ringkas;
+    const n = nilaiTidur(totalMenit);
+    const harian = [...totalPerHari(tidur7).values()];
+    const rata = rataMenit(harian);
+    const bangunTerakhir = Math.max(...[utama, ...lain].map((t) => Date.parse(t.wokeAt)));
+    const bangunKeGym = mulaiGym ? (Date.parse(mulaiGym) - bangunTerakhir) / 3_600_000 : null;
     tidurData = {
-      jam_tidur: tidur.jamTidur,
-      jam_bangun: tidur.jamBangun,
-      durasi_jam: jamDesimal(tidur.durasiMenit),
-      durasi_teks: fmtDurasi(tidur.durasiMenit),
+      jam_tidur: utama.jamTidur,
+      jam_bangun: utama.jamBangun,
+      durasi_jam: jamDesimal(totalMenit),
+      durasi_teks: fmtDurasi(totalMenit),
       target_jam: TARGET_TIDUR_JAM,
       status: n.level === "pas" ? "agak_kurang" : n.level,
-      kualitas_1_sampai_5: tidur.kualitas,
-      catatan_nata: tidur.catatan,
+      kualitas_1_sampai_5: utama.kualitas,
+      catatan_nata: [utama, ...lain].map((t) => t.catatan).filter(Boolean).join(" / ") || null,
       jam_bangun_ke_gym: bangunKeGym != null && bangunKeGym >= 0 && bangunKeGym <= 24 ? Math.round(bangunKeGym * 10) / 10 : null,
       rata2_tidur_7_hari_jam: rata != null ? jamDesimal(rata) : null,
-      malam_tercatat_7_hari: tidur7.length,
+      malam_tercatat_7_hari: harian.length,
+      ...(lain.length ? { tidur_lain: lain.map((t) => ({ jam_tidur: t.jamTidur, jam_bangun: t.jamBangun, durasi_teks: fmtDurasi(t.durasiMenit) })) } : {}),
     };
   }
 

@@ -35,7 +35,7 @@ import { tebakSetBebas } from "../ai/setBebas.ts";
 import { bacaKodeSet, kodeSet } from "./kodeSet.ts";
 import { buatKesimpulanSesi } from "../ai/summary.ts";
 import { handleMakanText, handleNutriCallback, handlePhoto, showFavorites, showProgress } from "./nutrition.ts";
-import { callbackTidur, perintahTidur } from "./tidur.ts";
+import { callbackTidur, perintahTidur, sudahBangun } from "./tidur.ts";
 
 export type Ctx = {
   send: (text: string, keyboard?: Keyboard) => Promise<void>;
@@ -63,7 +63,7 @@ const HELP = [
   "/deload — saran minggu ringan (deload); /deload mulai atau /deload selesai",
   "Kalimat bebas juga bisa, contoh: tadi bench 60 kilo 10 kali 3 set (gua konfirmasi dulu sebelum dicatat)",
   "/suplemen — catat creatine dan whey",
-  "/tidur 23:30 6:00 nyenyak — catat tidur semalam (jam tidur, jam bangun, cerita bebas). /tidur aja buat lihat rekap",
+  "/tidur — rekap + tombol \"mau tidur\" / \"udah bangun\" (atau /bangun). Manual: /tidur 23:30 6:00 nyenyak",
   "kardio 20 — catat menit kardio (jalan di treadmill)",
   "📸 Kirim foto makanan — gua hitung kalori dan proteinnya",
   "⚖️ Kirim screenshot layar Tanita dengan caption 'tanita' — gua baca semua angka komposisi badan (konfirmasi dulu sebelum disimpan)",
@@ -693,6 +693,8 @@ export async function handleBotInput(input: BotUpdate, ctx: Ctx): Promise<void> 
         return tampilSuplemen(ctx, today);
       case "/tidur":
         return perintahTidur(ctx, rest.join(" "));
+      case "/bangun":
+        return sudahBangun(ctx);
       case "/kardio":
         return catatKardio(ctx, today, parseInt(rest[0] ?? "", 10));
       default:

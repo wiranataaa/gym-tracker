@@ -6,7 +6,8 @@ import { after } from "next/server";
 import { buatKesimpulanSesi } from "@/lib/ai/summary.ts";
 import { requireOwner, supabaseAuth } from "@/lib/auth.ts";
 import { sahWaktuGym } from "@/lib/program/waktu.ts";
-import { hapusTidur, simpanTidur } from "@/lib/tidur/db.ts";
+import { hapusTidur, mulaiTidur, simpanTidur, ubahMulaiTidur } from "@/lib/tidur/db.ts";
+import { jamWIB } from "@/lib/tidur/hitung.ts";
 import { todayWIB } from "@/lib/time.ts";
 import {
   closeStaleSessions,
@@ -32,39 +33,59 @@ function refresh() {
   revalidatePath("/");
 }
 
+const idSah = (id: unknown): id is number => Number.isInteger(id) && (id as number) > 0;
+
+/** "Mau tidur": catat jam mulai tidur sekarang, atau jam yang diisi. Jam bangun menyusul. */
+export async function mulaiTidurApp(waktu?: { tanggal: string; jam: string }): Promise<Result> {
+  await requireOwner();
+  const now = new Date();
+  const r = await mulaiTidur(String(waktu?.tanggal ?? todayWIB(now)), String(waktu?.jam ?? jamWIB(now.toISOString())));
+  if (!r.ok) return r;
+  refresh();
+  return { ok: true };
+}
+
+export async function ubahMulaiTidurApp(id: number, tanggal: string, jam: string): Promise<Result> {
+  await requireOwner();
+  if (!idSah(id)) return { ok: false, error: "Catatan nggak valid" };
+  const r = await ubahMulaiTidur(id, String(tanggal), String(jam));
+  if (r.ok) refresh();
+  return r;
+}
+
 /**
- * Catat tidur dari app: tanggal dan jam tidur serta bangun diisi sendiri. `asal` = tanggal bangun
- * catatan yang lagi diubah; kalau tanggal bangunnya dipindah, catatan lama dihapus.
+ * Simpan satu tidur lengkap dari app (tanggal dan jam tidur serta bangun). `id` diisi = ubah baris itu,
+ * termasuk menutup tidur yang masih jalan ("udah bangun"); null = catatan baru.
  */
 export async function simpanTidurApp(input: {
+  id: number | null;
   tanggalTidur: string;
   jamTidur: string;
   tanggalBangun: string;
   jamBangun: string;
   kualitas: number | null;
   catatan: string;
-  asal: string | null;
 }): Promise<Result> {
   await requireOwner();
-  const tanggalBangun = String(input.tanggalBangun ?? "");
+  if (input.id !== null && !idSah(input.id)) return { ok: false, error: "Catatan nggak valid" };
   const r = await simpanTidur({
+    id: input.id,
     tanggalTidur: String(input.tanggalTidur ?? ""),
-    tanggalBangun,
+    tanggalBangun: String(input.tanggalBangun ?? ""),
     jamTidur: String(input.jamTidur ?? ""),
     jamBangun: String(input.jamBangun ?? ""),
     kualitas: input.kualitas == null ? null : Number(input.kualitas),
     catatan: String(input.catatan ?? "").slice(0, 300),
   });
   if (!r.ok) return { ok: false, error: r.error };
-  if (input.asal && input.asal !== tanggalBangun && /^\d{4}-\d{2}-\d{2}$/.test(input.asal)) await hapusTidur(input.asal);
   refresh();
   return { ok: true };
 }
 
-export async function hapusTidurApp(tanggalBangun: string): Promise<Result> {
+export async function hapusTidurApp(id: number): Promise<Result> {
   await requireOwner();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalBangun)) return { ok: false, error: "Tanggal nggak valid" };
-  await hapusTidur(tanggalBangun);
+  if (!idSah(id)) return { ok: false, error: "Catatan nggak valid" };
+  await hapusTidur(id);
   refresh();
   return { ok: true };
 }

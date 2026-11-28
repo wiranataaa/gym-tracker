@@ -94,6 +94,41 @@ export function susunWaktuTidurTanggal(
   return { ok: true, waktu: { sleptAt, wokeAt, durasiMenit } };
 }
 
+/** Waktu mulai tidur ("mau tidur"): nggak boleh jauh di depan, dan nggak lebih lama dari batas durasi. */
+export function susunMulaiTidur(tanggal: string, jam: string, sekarang: Date = new Date()): { ok: true; sleptAt: string } | { ok: false; error: string } {
+  const t = bacaJam(jam);
+  if (t == null || !tanggalSah(tanggal)) return { ok: false, error: "Tanggal dan jam mulai tidurnya diisi dulu" };
+  const sleptAt = wibIso(tanggal, t);
+  const selisihMenit = (sekarang.getTime() - new Date(sleptAt).getTime()) / 60_000;
+  if (selisihMenit < -60) return { ok: false, error: "Jam tidurnya masih lebih dari sejam lagi. Catat pas udah mau tidur." };
+  if (selisihMenit > MAKS_DURASI_MENIT) return { ok: false, error: "Itu udah lebih dari 16 jam lalu. Kalau udah bangun, pakai catat manual." };
+  return { ok: true, sleptAt };
+}
+
+/**
+ * Catatan tidur yang waktunya tumpang tindih dengan rentang baru (null kalau aman).
+ * Menempel persis (bangun jam 6, tidur lagi jam 6) nggak dianggap bentrok.
+ */
+export function cariBentrok<T extends { id: number; sleptAt: string; wokeAt: string }>(daftar: T[], sleptAt: string, wokeAt: string, kecualiId?: number | null): T | null {
+  const s = new Date(sleptAt).getTime();
+  const w = new Date(wokeAt).getTime();
+  return daftar.find((d) => d.id !== kecualiId && s < new Date(d.wokeAt).getTime() && w > new Date(d.sleptAt).getTime()) ?? null;
+}
+
+/** Gabungkan beberapa tidur yang bangunnya di hari yang sama: total, tidur utama (terlama), dan sisanya. */
+export function ringkasHari<T extends { durasiMenit: number }>(sesi: T[]): { totalMenit: number; utama: T; lain: T[] } | null {
+  if (sesi.length === 0) return null;
+  const utama = sesi.reduce((a, b) => (b.durasiMenit > a.durasiMenit ? b : a));
+  return { totalMenit: sesi.reduce((a, s) => a + s.durasiMenit, 0), utama, lain: sesi.filter((s) => s !== utama) };
+}
+
+/** Total menit tidur per tanggal bangun. */
+export function totalPerHari(sesi: { tanggalBangun: string; durasiMenit: number }[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const s of sesi) m.set(s.tanggalBangun, (m.get(s.tanggalBangun) ?? 0) + s.durasiMenit);
+  return m;
+}
+
 /** 390 -> "6 jam 30 menit"; 420 -> "7 jam" */
 export function fmtDurasi(menit: number): string {
   const j = Math.floor(menit / 60);

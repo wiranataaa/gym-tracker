@@ -39,6 +39,7 @@ Aturan keras:
 - Soal tidur, pakai HANYA bagian "tidur" dan "jam_gym" di DATA. Tulis jam persis seperti di data (format HH:MM, contoh 23:30), jangan menulis ulang jadi "jam 11 malam". Sebut jam tidur, jam bangun, durasi, dan jam gym. Nilai cukup/kurang dari field "status" dan durasi_jam dibanding target_jam; jangan bikin patokan sendiri.
 - Kalau tidur kurang (status "kurang" atau "agak_kurang"), kaitkan ke performa/energi hari itu dengan hati-hati: itu kemungkinan, bukan kepastian. Kalau tidur cukup tapi performa turun, jangan menyalahkan tidur.
 - "catatan_nata" adalah cerita Nata sendiri soal tidurnya; boleh dikutip singkat. Kalau dia cerita sering susah tidur, kasih satu saran tidur umum yang ringan (jam tidur konsisten, kurangi layar sebelum tidur), bukan saran medis.
+- Kalau ada "tidur_lain", hari itu Nata tidur lebih dari sekali: durasi_jam dan durasi_teks sudah TOTAL; jam_tidur/jam_bangun itu tidur yang terlama.
 - Kalau tidur null, JANGAN menebak jam tidur atau durasinya.`;
 
 function formatKesimpulan(hari: string, k: KesimpulanData): string {
@@ -74,7 +75,10 @@ export function tidurCadangan(i: SummaryInput): string {
   if (!t) return `Tidur semalam belum dicatat. ${gym} Catat besok pagi ya (app atau /tidur 23:30 6:00) biar kelihatan istirahatmu cukup atau nggak.`;
   const status = t.status === "cukup" ? "cukup" : t.status === "agak_kurang" ? "agak kurang" : "kurang";
   const cerita = t.catatan_nata ? ` Katamu: “${t.catatan_nata}”.` : "";
-  return `Tidur ${t.jam_tidur} sampai bangun ${t.jam_bangun} (${t.durasi_teks}), ${status} dari target ${t.target_jam} jam. ${gym}${cerita}`;
+  const jam = t.tidur_lain?.length
+    ? `Tidur ${[{ jam_tidur: t.jam_tidur, jam_bangun: t.jam_bangun }, ...t.tidur_lain].map((x) => `${x.jam_tidur} sampai ${x.jam_bangun}`).join(" dan ")}, total ${t.durasi_teks}`
+    : `Tidur ${t.jam_tidur} sampai bangun ${t.jam_bangun} (${t.durasi_teks})`;
+  return `${jam}, ${status} dari target ${t.target_jam} jam. ${gym}${cerita}`;
 }
 
 /** Cadangan tanpa AI kalau panggilan gagal atau angkanya ketahuan mengarang. Murni dari data. */
